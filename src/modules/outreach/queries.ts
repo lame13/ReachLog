@@ -24,6 +24,7 @@ export type TargetFilters = {
 
 export function getDashboardData() {
   const db = getDb();
+  const sqlite = getSqlite();
   const todayEnd = endOfTodayIso();
 
   const [replyCount] = db
@@ -94,16 +95,50 @@ export function getDashboardData() {
     .limit(6)
     .all();
 
+  const [failedSendCount] = sqlite
+    .prepare("SELECT COUNT(*) as count FROM outbound_sends WHERE status = 'failed'")
+    .all() as Array<{ count: number }>;
+
+  const failedSends = sqlite
+    .prepare(
+      `
+      SELECT
+        outbound_sends.id,
+        outbound_sends.target_id as targetId,
+        outbound_sends.to_email as toEmail,
+        outbound_sends.subject,
+        outbound_sends.last_error as lastError,
+        outbound_sends.updated_at as updatedAt,
+        targets.company_name as companyName
+      FROM outbound_sends
+      INNER JOIN targets ON targets.id = outbound_sends.target_id
+      WHERE outbound_sends.status = 'failed'
+      ORDER BY outbound_sends.updated_at DESC
+      LIMIT 5
+    `
+    )
+    .all() as Array<{
+    id: string;
+    targetId: string;
+    toEmail: string;
+    subject: string;
+    lastError: string | null;
+    updatedAt: string;
+    companyName: string;
+  }>;
+
   return {
     stats: {
       repliesNeedingAction: replyCount?.count ?? 0,
       followupsDue: followupDueCount?.count ?? 0,
       overdueFollowups: overdueCount?.count ?? 0,
-      sentNoReply: sentNoReplyCount?.count ?? 0
+      sentNoReply: sentNoReplyCount?.count ?? 0,
+      failedSends: failedSendCount?.count ?? 0
     },
     replies,
     followups,
-    recentMessages
+    recentMessages,
+    failedSends
   };
 }
 

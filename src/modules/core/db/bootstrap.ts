@@ -3,6 +3,12 @@ import type BetterSqlite3 from "better-sqlite3";
 type SqliteDatabase = BetterSqlite3.Database;
 
 const schemaSql = `
+CREATE TABLE IF NOT EXISTS schema_migrations (
+  version TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  applied_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS contacts (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -131,6 +137,40 @@ CREATE TABLE IF NOT EXISTS jobs (
 );
 CREATE INDEX IF NOT EXISTS jobs_status_run_idx ON jobs(status, run_at);
 
+CREATE TABLE IF NOT EXISTS outbound_sends (
+  id TEXT PRIMARY KEY,
+  target_id TEXT NOT NULL REFERENCES targets(id),
+  thread_id TEXT REFERENCES threads(id),
+  to_email TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  body_text TEXT NOT NULL,
+  message_id TEXT NOT NULL,
+  status TEXT NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT,
+  sent_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS outbound_sends_message_id_unique ON outbound_sends(message_id);
+CREATE INDEX IF NOT EXISTS outbound_sends_status_idx ON outbound_sends(status);
+CREATE INDEX IF NOT EXISTS outbound_sends_target_idx ON outbound_sends(target_id);
+
+CREATE TABLE IF NOT EXISTS worker_locks (
+  name TEXT PRIMARY KEY,
+  owner TEXT NOT NULL,
+  locked_at TEXT NOT NULL,
+  lease_until TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS mailbox_cursors (
+  mailbox TEXT PRIMARY KEY,
+  uid_validity INTEGER,
+  last_uid INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS module_settings (
   key TEXT PRIMARY KEY,
   enabled INTEGER NOT NULL DEFAULT 0,
@@ -141,6 +181,8 @@ CREATE TABLE IF NOT EXISTS module_settings (
 
 export function bootstrapDatabase(sqlite: SqliteDatabase) {
   sqlite.exec(schemaSql);
+  recordSchemaVersion(sqlite, "0001", "bootstrap_schema");
+  recordSchemaVersion(sqlite, "0002", "prod_safety_tables");
 
   const seeded = sqlite
     .prepare("SELECT COUNT(*) as count FROM contacts")
@@ -152,6 +194,18 @@ export function bootstrapDatabase(sqlite: SqliteDatabase) {
   }
 
   seedDatabase(sqlite);
+}
+
+function recordSchemaVersion(sqlite: SqliteDatabase, version: string, name: string) {
+  sqlite
+    .prepare(
+      `
+      INSERT INTO schema_migrations (version, name, applied_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(version) DO NOTHING
+    `
+    )
+    .run(version, name, new Date().toISOString());
 }
 
 function seedDatabase(sqlite: SqliteDatabase) {

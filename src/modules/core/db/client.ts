@@ -24,7 +24,9 @@ export function getSqlite() {
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
   const sqlite = new Database(dbPath);
+  sqlite.pragma("busy_timeout = 10000");
   sqlite.pragma("journal_mode = WAL");
+  sqlite.pragma("synchronous = NORMAL");
   sqlite.pragma("foreign_keys = ON");
   bootstrapDatabase(sqlite);
 

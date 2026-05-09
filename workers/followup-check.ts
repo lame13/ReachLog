@@ -1,6 +1,8 @@
 import { env } from "../src/modules/core/env";
 import { getSqlite } from "../src/modules/core/db/client";
+import { withWorkerLock } from "../src/modules/core/db/locks";
 import { createId } from "../src/modules/core/ids";
+import { notifyWorkerFailure } from "../src/modules/core/worker-alerts";
 import { sendTelegramMessage } from "../src/modules/telegram/notify";
 
 type DueFollowup = {
@@ -12,6 +14,10 @@ type DueFollowup = {
 };
 
 async function main() {
+  await withWorkerLock("followup-check", 120, checkFollowups);
+}
+
+async function checkFollowups() {
   const sqlite = getSqlite();
   const now = new Date().toISOString();
   const dueFollowups = sqlite
@@ -67,7 +73,8 @@ async function main() {
   console.log(`followup-check: ${dueFollowups.length} due`);
 }
 
-main().catch((error) => {
+main().catch(async (error) => {
   console.error(error);
+  await notifyWorkerFailure("followup-check", error);
   process.exitCode = 1;
 });

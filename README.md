@@ -124,6 +124,9 @@ backup           daily
 
 `worker:backup` uses SQLite `VACUUM INTO`, gzips the snapshot, and optionally copies the backup directory with `rclone` when `B2_REMOTE` is set.
 
+Workers use SQLite-backed leases so timer overlap does not run the same job twice
+at the same time. Mail sync stores per-mailbox IMAP UID cursors in SQLite.
+
 ## Proton Bridge
 
 Use Proton Bridge on the same VDS or private network as the app and point the env vars at Bridge's local IMAP/SMTP ports:
@@ -153,6 +156,14 @@ HTTPS reverse proxy -> Next.js app -> SQLite file
                          |
                          -> worker scripts via cron/systemd
                          -> Proton Bridge IMAP/SMTP
+```
+
+Production examples live in:
+
+```text
+docs/production.md
+deploy/caddy/Caddyfile.example
+deploy/systemd/
 ```
 
 ## Roadmap

@@ -1,0 +1,21 @@
+[Unit]
+Description=ReachLog Next.js app
+After=network.target
+
+[Service]
+Type=simple
+User=reachlog
+Group=reachlog
+WorkingDirectory=/opt/reachlog
+Environment=NODE_ENV=production
+EnvironmentFile=/etc/reachlog.env
+ExecStart=/usr/bin/npm run start
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/data/outreach-crm
+
+[Install]
+WantedBy=multi-user.target

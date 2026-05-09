@@ -1,0 +1,11 @@
+[Unit]
+Description=Run ReachLog follow-up check every 15 minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=15min
+AccuracySec=1min
+Unit=reachlog-followup-check.service
+
+[Install]
+WantedBy=timers.target

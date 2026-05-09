@@ -1,0 +1,10 @@
+[Unit]
+Description=Run ReachLog backup daily
+
+[Timer]
+OnCalendar=*-*-* 03:20:00
+Persistent=true
+Unit=reachlog-backup.service
+
+[Install]
+WantedBy=timers.target

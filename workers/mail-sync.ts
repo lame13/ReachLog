@@ -2,7 +2,9 @@ import { ImapFlow } from "imapflow";
 import { simpleParser, type ParsedMail } from "mailparser";
 import { env } from "../src/modules/core/env";
 import { getSqlite } from "../src/modules/core/db/client";
+import { withWorkerLock } from "../src/modules/core/db/locks";
 import { createId } from "../src/modules/core/ids";
+import { notifyWorkerFailure } from "../src/modules/core/worker-alerts";
 import {
   extractThreadHeaderCandidates,
   normalizeSubject
@@ -28,6 +30,10 @@ async function main() {
     return;
   }
 
+  await withWorkerLock("mail-sync", 240, runMailSync);
+}
+
+async function runMailSync() {
   const client = new ImapFlow({
     host: env.IMAP_HOST,
     port: env.IMAP_PORT,
@@ -56,12 +62,28 @@ async function importMailbox(client: ImapFlow, mailbox: string) {
   let skipped = 0;
 
   try {
-    for await (const message of client.fetch("1:*", {
-      envelope: true,
-      source: true
-    })) {
+    const uidValidity = client.mailbox ? Number(client.mailbox.uidValidity) : null;
+    const cursor = getMailboxCursor(mailbox, uidValidity);
+    const uidNext = client.mailbox ? client.mailbox.uidNext : null;
+
+    if (uidNext && cursor.lastUid >= uidNext - 1) {
+      console.log(`mail-sync ${mailbox}: no new messages`);
+      return;
+    }
+
+    const range = cursor.lastUid > 0 ? `${cursor.lastUid + 1}:*` : "1:*";
+
+    for await (const message of client.fetch(
+      range,
+      {
+        envelope: true,
+        source: true
+      },
+      { uid: true }
+    )) {
       if (!message.source) {
         skipped += 1;
+        updateMailboxCursor(mailbox, uidValidity, message.uid);
         continue;
       }
 
@@ -70,6 +92,7 @@ async function importMailbox(client: ImapFlow, mailbox: string) {
 
       if (!messageId) {
         skipped += 1;
+        updateMailboxCursor(mailbox, uidValidity, message.uid);
         continue;
       }
 
@@ -79,6 +102,7 @@ async function importMailbox(client: ImapFlow, mailbox: string) {
 
       if (exists) {
         skipped += 1;
+        updateMailboxCursor(mailbox, uidValidity, message.uid);
         continue;
       }
 
@@ -103,6 +127,7 @@ async function importMailbox(client: ImapFlow, mailbox: string) {
           normalizedSubject
         });
         imported += 1;
+        updateMailboxCursor(mailbox, uidValidity, message.uid);
         continue;
       }
 
@@ -116,12 +141,54 @@ async function importMailbox(client: ImapFlow, mailbox: string) {
       });
 
       imported += 1;
+      updateMailboxCursor(mailbox, uidValidity, message.uid);
     }
   } finally {
     lock.release();
   }
 
   console.log(`mail-sync ${mailbox}: ${imported} new, ${skipped} skipped`);
+}
+
+function getMailboxCursor(mailbox: string, uidValidity: number | null) {
+  const sqlite = getSqlite();
+  const row = sqlite
+    .prepare(
+      "SELECT uid_validity as uidValidity, last_uid as lastUid FROM mailbox_cursors WHERE mailbox = ?"
+    )
+    .get(mailbox) as { uidValidity: number | null; lastUid: number } | undefined;
+
+  if (!row) {
+    return { lastUid: 0 };
+  }
+
+  if (uidValidity && row.uidValidity && row.uidValidity !== uidValidity) {
+    sqlite
+      .prepare("UPDATE mailbox_cursors SET uid_validity = ?, last_uid = 0, updated_at = ? WHERE mailbox = ?")
+      .run(uidValidity, new Date().toISOString(), mailbox);
+    return { lastUid: 0 };
+  }
+
+  return { lastUid: row.lastUid ?? 0 };
+}
+
+function updateMailboxCursor(
+  mailbox: string,
+  uidValidity: number | null,
+  lastUid: number
+) {
+  getSqlite()
+    .prepare(
+      `
+      INSERT INTO mailbox_cursors (mailbox, uid_validity, last_uid, updated_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(mailbox) DO UPDATE SET
+        uid_validity = excluded.uid_validity,
+        last_uid = MAX(mailbox_cursors.last_uid, excluded.last_uid),
+        updated_at = excluded.updated_at
+    `
+    )
+    .run(mailbox, uidValidity, lastUid, new Date().toISOString());
 }
 
 function findOrCreateThread({
@@ -519,7 +586,8 @@ function isSentMailbox(mailbox: string) {
   return mailbox.toLowerCase().includes("sent");
 }
 
-main().catch((error) => {
+main().catch(async (error) => {
   console.error(error);
+  await notifyWorkerFailure("mail-sync", error);
   process.exitCode = 1;
 });

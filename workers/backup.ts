@@ -2,8 +2,16 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { env } from "../src/modules/core/env";
+import { getSqlite } from "../src/modules/core/db/client";
+import { withWorkerLock } from "../src/modules/core/db/locks";
+import { notifyWorkerFailure } from "../src/modules/core/worker-alerts";
 
-function main() {
+async function main() {
+  await withWorkerLock("backup", 1800, runBackup);
+}
+
+async function runBackup() {
+  getSqlite();
   fs.mkdirSync(env.BACKUP_DIR, { recursive: true });
 
   const date = new Date().toISOString().slice(0, 10);
@@ -26,9 +34,8 @@ function main() {
   console.log(`backup written: ${gzipPath}`);
 }
 
-try {
-  main();
-} catch (error) {
+main().catch(async (error) => {
   console.error(error);
+  await notifyWorkerFailure("backup", error);
   process.exitCode = 1;
-}
+});

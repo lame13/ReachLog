@@ -193,6 +193,55 @@ export const jobs = sqliteTable(
   })
 );
 
+export const outboundSends = sqliteTable(
+  "outbound_sends",
+  {
+    id: text("id").primaryKey(),
+    targetId: text("target_id")
+      .notNull()
+      .references(() => targets.id),
+    threadId: text("thread_id").references(() => threads.id),
+    toEmail: text("to_email").notNull(),
+    subject: text("subject").notNull(),
+    bodyText: text("body_text").notNull(),
+    messageId: text("message_id").notNull(),
+    status: text("status").notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    lastError: text("last_error"),
+    sentAt: text("sent_at"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull()
+  },
+  (table) => ({
+    messageIdUnique: uniqueIndex("outbound_sends_message_id_unique").on(
+      table.messageId
+    ),
+    statusIdx: index("outbound_sends_status_idx").on(table.status),
+    targetIdx: index("outbound_sends_target_idx").on(table.targetId)
+  })
+);
+
+export const workerLocks = sqliteTable("worker_locks", {
+  name: text("name").primaryKey(),
+  owner: text("owner").notNull(),
+  lockedAt: text("locked_at").notNull(),
+  leaseUntil: text("lease_until").notNull(),
+  updatedAt: text("updated_at").notNull()
+});
+
+export const mailboxCursors = sqliteTable("mailbox_cursors", {
+  mailbox: text("mailbox").primaryKey(),
+  uidValidity: integer("uid_validity"),
+  lastUid: integer("last_uid").notNull().default(0),
+  updatedAt: text("updated_at").notNull()
+});
+
+export const schemaMigrations = sqliteTable("schema_migrations", {
+  version: text("version").primaryKey(),
+  name: text("name").notNull(),
+  appliedAt: text("applied_at").notNull()
+});
+
 export const moduleSettings = sqliteTable("module_settings", {
   key: text("key").primaryKey(),
   enabled: integer("enabled", { mode: "boolean" }).notNull().default(false),

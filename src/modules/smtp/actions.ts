@@ -43,6 +43,7 @@ export async function sendNowAction(formData: FormData) {
   }
 
   const contactEmail = target.contactEmail;
+  const messageId = createLocalMessageId();
 
   if (!env.SMTP_ENABLED) {
     createTargetEvent(targetId, "send_blocked", {
@@ -52,6 +53,14 @@ export async function sendNowAction(formData: FormData) {
     revalidateAfterSend(targetId);
     return;
   }
+
+  const outboundSendId = createPendingOutboundSend({
+    target,
+    contactEmail,
+    subject,
+    body,
+    messageId
+  });
 
   const transporter = nodemailer.createTransport({
     host: env.SMTP_HOST,
@@ -71,20 +80,27 @@ export async function sendNowAction(formData: FormData) {
       from: getFromEmail(),
       to: target.contactEmail,
       subject,
-      text: body
+      text: body,
+      messageId
     });
 
     persistSentEmail({
       target: { ...target, contactEmail },
       subject,
       body,
-      messageId: result.messageId || createLocalMessageId(),
+      messageId,
+      outboundSendId,
       rawResult: result,
       createFollowup,
       followupDays
     });
   } catch (error) {
+    markOutboundSendFailed(
+      outboundSendId,
+      error instanceof Error ? error.message : "unknown_error"
+    );
     createTargetEvent(targetId, "send_failed", {
+      messageId,
       subject,
       error: error instanceof Error ? error.message : "unknown_error"
     });
@@ -100,6 +116,7 @@ function revalidateAfterSend(targetId: string) {
   revalidatePath("/followups");
   revalidatePath("/targets");
   revalidatePath(`/targets/${targetId}`);
+  revalidatePath("/analytics");
 }
 
 type SendableTarget = {
@@ -142,6 +159,7 @@ function persistSentEmail({
   subject,
   body,
   messageId,
+  outboundSendId,
   rawResult,
   createFollowup,
   followupDays
@@ -150,6 +168,7 @@ function persistSentEmail({
   subject: string;
   body: string;
   messageId: string;
+  outboundSendId: string;
   rawResult: nodemailer.SentMessageInfo;
   createFollowup: boolean;
   followupDays: number;
@@ -243,6 +262,21 @@ function persistSentEmail({
       .prepare("UPDATE targets SET status = 'sent', updated_at = ? WHERE id = ?")
       .run(now, target.id);
 
+    sqlite
+      .prepare(
+        `
+        UPDATE outbound_sends
+        SET thread_id = ?,
+            status = 'sent',
+            attempts = attempts + 1,
+            sent_at = ?,
+            last_error = NULL,
+            updated_at = ?
+        WHERE id = ?
+      `
+      )
+      .run(threadId, now, now, outboundSendId);
+
     const completedFollowups = sqlite
       .prepare(
         `
@@ -299,6 +333,68 @@ function persistSentEmail({
   });
 
   transaction();
+}
+
+function createPendingOutboundSend({
+  target,
+  contactEmail,
+  subject,
+  body,
+  messageId
+}: {
+  target: SendableTarget;
+  contactEmail: string;
+  subject: string;
+  body: string;
+  messageId: string;
+}) {
+  const now = new Date().toISOString();
+  const outboundSendId = createId("outbound");
+
+  getSqlite()
+    .prepare(
+      `
+      INSERT INTO outbound_sends (
+        id, target_id, thread_id, to_email, subject, body_text, message_id,
+        status, attempts, last_error, sent_at, created_at, updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 0, NULL, NULL, ?, ?)
+    `
+    )
+    .run(
+      outboundSendId,
+      target.id,
+      target.threadId,
+      contactEmail,
+      subject,
+      body,
+      messageId,
+      now,
+      now
+    );
+
+  createTargetEvent(target.id, "send_queued", {
+    outboundSendId,
+    messageId,
+    subject
+  });
+
+  return outboundSendId;
+}
+
+function markOutboundSendFailed(outboundSendId: string, error: string) {
+  getSqlite()
+    .prepare(
+      `
+      UPDATE outbound_sends
+      SET status = 'failed',
+          attempts = attempts + 1,
+          last_error = ?,
+          updated_at = ?
+      WHERE id = ?
+    `
+    )
+    .run(error, new Date().toISOString(), outboundSendId);
 }
 
 function getFromEmail() {

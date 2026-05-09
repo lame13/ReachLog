@@ -59,7 +59,53 @@ export default async function DashboardPage({ searchParams }: PageProps) {
           label="Sent, no reply"
           value={data.stats.sentNoReply}
         />
+        <MetricCard
+          icon={AlertTriangle}
+          label="Failed sends"
+          tone="rose"
+          value={data.stats.failedSends}
+        />
       </div>
+
+      {data.failedSends.length > 0 && (
+        <section className="mt-6 rounded-lg border border-rose-200 bg-white shadow-sm">
+          <div className="border-b border-rose-100 px-4 py-3">
+            <h2 className="font-semibold text-rose-800">Failed Sends</h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-[820px] text-sm">
+              <thead className="bg-rose-50 text-left text-rose-800">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Company</th>
+                  <th className="px-4 py-3 font-medium">To</th>
+                  <th className="px-4 py-3 font-medium">Subject</th>
+                  <th className="px-4 py-3 font-medium">Error</th>
+                  <th className="px-4 py-3 font-medium">Updated</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.failedSends.map((send) => (
+                  <tr key={send.id} className="border-t border-line align-top">
+                    <td className="px-4 py-3 font-medium">
+                      <Link href={`/targets/${send.targetId}`}>
+                        {send.companyName}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-muted">{send.toEmail}</td>
+                    <td className="px-4 py-3">{send.subject}</td>
+                    <td className="px-4 py-3 text-rose-700">
+                      {send.lastError ?? "unknown"}
+                    </td>
+                    <td className="px-4 py-3 text-muted">
+                      {formatDateTime(send.updatedAt)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       <section className="mt-6 rounded-lg border border-line bg-white shadow-sm">
         <div className="flex items-center justify-between border-b border-line px-4 py-3">
