@@ -16,6 +16,10 @@ const portFromString = (fallback: number) =>
 const EnvSchema = z.object({
   DATABASE_PATH: z.string().default(".data/app.sqlite"),
 
+  APP_BASIC_AUTH_ENABLED: booleanFromString,
+  APP_BASIC_AUTH_USER: z.string().optional(),
+  APP_BASIC_AUTH_PASSWORD: z.string().optional(),
+
   SMTP_ENABLED: booleanFromString,
   SMTP_HOST: z.string().default("127.0.0.1"),
   SMTP_PORT: portFromString(1025),

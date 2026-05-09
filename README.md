@@ -61,7 +61,17 @@ IMAP_ENABLED=false
 TELEGRAM_ENABLED=false
 ```
 
-The app assumes a single owner user. Put Cloudflare Access or Caddy `basic_auth` in front of it instead of building app-level auth now.
+The app assumes a single owner user. For production, enable the built-in Basic
+Auth gate:
+
+```text
+APP_BASIC_AUTH_ENABLED=true
+APP_BASIC_AUTH_USER=owner
+APP_BASIC_AUTH_PASSWORD=use-a-long-random-password
+```
+
+You can still put Cloudflare Access, Forge Nginx auth, or Caddy `basic_auth` in
+front as an extra gate.
 
 ## Pages
 
