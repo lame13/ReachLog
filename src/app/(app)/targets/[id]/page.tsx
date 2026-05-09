@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Ban, FileText, Mail, Send } from "lucide-react";
+import { Ban, FileText, Mail, RefreshCw, Send } from "lucide-react";
 import { SendEmailModal } from "@/components/send-email-modal";
 import { StatusPill } from "@/components/status-pill";
 import { formatDateTime } from "@/modules/core/dates";
+import { recheckContactEmailAction } from "@/modules/emailVerification/actions";
 import {
   addTargetNoteAction,
   updateDoNotResendAction,
@@ -139,6 +140,40 @@ export default async function TargetDetailPage({
         </div>
 
         <aside className="space-y-6">
+          <section className="rounded-lg border border-line bg-white shadow-sm">
+            <div className="border-b border-line px-4 py-3">
+              <h2 className="font-semibold">Email Verification</h2>
+            </div>
+            <div className="space-y-3 p-4 text-sm">
+              {target.contactEmail ? (
+                <>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusPill status={target.emailVerificationStatus ?? "not checked"} />
+                    <span className="text-muted">
+                      {target.emailVerificationProvider ?? "emaillistverify"}
+                    </span>
+                  </div>
+                  <div className="text-muted">
+                    Checked: {formatDateTime(target.emailVerificationCheckedAt)}
+                  </div>
+                  {target.emailVerificationError && (
+                    <div className="text-rose-700">{target.emailVerificationError}</div>
+                  )}
+                  <form action={recheckContactEmailAction}>
+                    <input name="targetId" type="hidden" value={target.id} />
+                    <input name="contactId" type="hidden" value={target.contactId ?? ""} />
+                    <button className="inline-flex h-9 items-center gap-2 rounded-md border border-line px-3 text-xs font-medium hover:bg-panel">
+                      <RefreshCw className="size-3.5" aria-hidden="true" />
+                      Recheck email
+                    </button>
+                  </form>
+                </>
+              ) : (
+                <div className="text-muted">No email on this target.</div>
+              )}
+            </div>
+          </section>
+
           <section className="rounded-lg border border-line bg-white shadow-sm">
             <div className="border-b border-line px-4 py-3">
               <h2 className="font-semibold">Edit Target</h2>

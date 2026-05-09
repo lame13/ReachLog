@@ -8,6 +8,7 @@ import { getSqlite } from "@/modules/core/db/client";
 import { createId } from "@/modules/core/ids";
 import { normalizeSubject } from "@/modules/mailbox/threading";
 import { isSendBlockedStatus } from "@/modules/outreach/status";
+import { isEmailVerificationBlocking } from "@/modules/emailVerification/service";
 
 export async function saveDraftAction(formData: FormData) {
   const targetId = String(formData.get("targetId") ?? "");
@@ -39,15 +40,26 @@ export async function sendNowAction(formData: FormData) {
   const target = getSendableTarget(targetId);
 
   const blockedStatus = isSendBlockedStatus(target?.status);
+  const blockedEmailVerification = isEmailVerificationBlocking(
+    target?.emailVerificationStatus
+  );
 
-  if (!target?.contactEmail || target.doNotResend || blockedStatus) {
+  if (
+    !target?.contactEmail ||
+    target.doNotResend ||
+    blockedStatus ||
+    blockedEmailVerification
+  ) {
     createTargetEvent(targetId, "send_blocked", {
       reason: target?.doNotResend
         ? "do_not_resend"
         : blockedStatus
           ? "blocked_status"
-          : "missing_contact_email",
+          : blockedEmailVerification
+            ? "email_verification_blocked"
+            : "missing_contact_email",
       status: target?.status,
+      emailVerificationStatus: target?.emailVerificationStatus,
       subject
     });
     revalidateAfterSend(targetId);
@@ -166,6 +178,7 @@ type SendableTarget = {
   companyName: string;
   status: string;
   doNotResend: number;
+  emailVerificationStatus: string | null;
   threadId: string | null;
   threadSubject: string | null;
   firstMessageId: string | null;
@@ -182,6 +195,7 @@ function getSendableTarget(targetId: string) {
         targets.status,
         targets.do_not_resend as doNotResend,
         contacts.email as contactEmail,
+        contacts.email_verification_status as emailVerificationStatus,
         threads.id as threadId,
         threads.subject as threadSubject,
         threads.first_message_id as firstMessageId

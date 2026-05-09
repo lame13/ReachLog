@@ -11,6 +11,7 @@ import {
   sourceDedupeKey
 } from "@/modules/outreach/dedupe";
 import { isSendBlockedStatus } from "@/modules/outreach/status";
+import { markContactEmailVerificationPending } from "@/modules/emailVerification/service";
 
 export type ImportPreviewResult =
   | "new target"
@@ -620,6 +621,17 @@ function upsertContact({
     .get(email) as { id: string } | undefined;
 
   if (existing) {
+    sqlite
+      .prepare(
+        `
+        UPDATE contacts
+        SET email_verification_provider = COALESCE(email_verification_provider, 'emaillistverify'),
+            email_verification_status = COALESCE(email_verification_status, 'pending')
+        WHERE id = ?
+      `
+      )
+      .run(existing.id);
+
     return existing.id;
   }
 
@@ -628,11 +640,16 @@ function upsertContact({
   sqlite
     .prepare(
       `
-      INSERT INTO contacts (id, name, email, domain, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO contacts (
+        id, name, email, domain, email_verification_provider,
+        email_verification_status, created_at, updated_at
+      )
+      VALUES (?, ?, ?, ?, 'emaillistverify', 'pending', ?, ?)
     `
     )
     .run(contactId, name, email, domain || email.split("@")[1] || "unknown", now, now);
+
+  markContactEmailVerificationPending(contactId, now);
 
   return contactId;
 }

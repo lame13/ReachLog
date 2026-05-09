@@ -160,6 +160,11 @@ IMAP_LOOKBACK_DAYS=90
 TELEGRAM_ENABLED=false
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
+
+EMAILLISTVERIFY_ENABLED=false
+EMAILLISTVERIFY_API_KEY=
+EMAILLISTVERIFY_TIMEOUT_MS=15000
+EMAILLISTVERIFY_BATCH_SIZE=25
 ```
 
 Turn `SMTP_ENABLED` and `IMAP_ENABLED` on only after Proton Bridge is installed
@@ -249,6 +254,12 @@ Every 15 minutes:
 
 ```bash
 cd /home/forge/reachlog.example.com && npm run worker:followup-check
+```
+
+Every 10-15 minutes if EmailListVerify is enabled:
+
+```bash
+cd /home/forge/reachlog.example.com && npm run worker:email-verify
 ```
 
 Daily, for example 03:20:

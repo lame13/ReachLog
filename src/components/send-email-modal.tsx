@@ -4,12 +4,16 @@ import { saveDraftAction, sendNowAction } from "@/modules/smtp/actions";
 import { formatDateTime } from "@/modules/core/dates";
 import { createId } from "@/modules/core/ids";
 import { isSendBlockedStatus } from "@/modules/outreach/status";
+import { isEmailVerificationBlocking } from "@/modules/emailVerification/service";
 
 type SendTarget = {
   id: string;
   companyName: string;
   doNotResend: boolean;
   contactEmail: string | null;
+  emailVerificationStatus: string | null;
+  emailVerificationCheckedAt: string | null;
+  emailVerificationError: string | null;
   contactName: string | null;
   status: string;
   lastOutboundAt: string | null;
@@ -33,7 +37,14 @@ export function SendEmailModal({
       : `Re: ${target.subject}`
     : `Quick question about ${target.companyName}`;
   const blockedStatus = isSendBlockedStatus(target.status);
-  const canSend = Boolean(target.contactEmail) && !target.doNotResend && !blockedStatus;
+  const blockedEmailVerification = isEmailVerificationBlocking(
+    target.emailVerificationStatus
+  );
+  const canSend =
+    Boolean(target.contactEmail) &&
+    !target.doNotResend &&
+    !blockedStatus &&
+    !blockedEmailVerification;
   const sendKey = createId("sendkey");
 
   return (
@@ -86,6 +97,15 @@ export function SendEmailModal({
           <div className="rounded-md border border-line bg-panel p-3 text-sm text-muted">
             <div>Last outbound: {formatDateTime(target.lastOutboundAt)}</div>
             <div>Status: {target.status}</div>
+            <div>
+              Email verification: {target.emailVerificationStatus ?? "not checked"}
+              {target.emailVerificationCheckedAt
+                ? ` at ${formatDateTime(target.emailVerificationCheckedAt)}`
+                : ""}
+            </div>
+            {target.emailVerificationError && (
+              <div>Email verification error: {target.emailVerificationError}</div>
+            )}
             <div>Do not resend: {target.doNotResend ? "on" : "off"}</div>
           </div>
 

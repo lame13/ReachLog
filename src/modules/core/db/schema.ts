@@ -14,6 +14,11 @@ export const contacts = sqliteTable(
     name: text("name").notNull(),
     email: text("email").notNull(),
     domain: text("domain").notNull(),
+    emailVerificationProvider: text("email_verification_provider"),
+    emailVerificationStatus: text("email_verification_status"),
+    emailVerificationCheckedAt: text("email_verification_checked_at"),
+    emailVerificationError: text("email_verification_error"),
+    emailVerificationRaw: text("email_verification_raw"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull()
   },

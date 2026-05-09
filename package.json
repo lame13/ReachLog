@@ -13,6 +13,7 @@
     "prod:check": "tsx scripts/prod/check.ts",
     "worker:mail-sync": "tsx workers/mail-sync.ts",
     "worker:list-mailboxes": "tsx workers/list-mailboxes.ts",
+    "worker:email-verify": "tsx workers/email-verify.ts",
     "worker:followup-check": "tsx workers/followup-check.ts",
     "worker:backup": "tsx workers/backup.ts"
   },

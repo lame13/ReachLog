@@ -13,6 +13,7 @@ import { formatDateTime, timeAgo } from "@/modules/core/dates";
 import { getDashboardData, getSendTarget } from "@/modules/outreach/queries";
 import { markDeadAction, snoozeFollowupAction } from "@/modules/followups/actions";
 import { isSendBlockedStatus } from "@/modules/outreach/status";
+import { isEmailVerificationBlocking } from "@/modules/emailVerification/service";
 
 type PageProps = {
   searchParams?: Promise<{
@@ -173,7 +174,8 @@ export default async function DashboardPage({ searchParams }: PageProps) {
                 const canSend =
                   Boolean(followup.contactEmail) &&
                   !followup.doNotResend &&
-                  !isSendBlockedStatus(followup.targetStatus);
+                  !isSendBlockedStatus(followup.targetStatus) &&
+                  !isEmailVerificationBlocking(followup.emailVerificationStatus);
 
                 return (
                 <tr key={followup.id} className="border-t border-line">

@@ -19,7 +19,8 @@ const checks: Check[] = [
   checkProductionAuth(),
   checkSeedMode(),
   checkSmtpConfig(),
-  checkImapConfig()
+  checkImapConfig(),
+  checkEmailListVerifyConfig()
 ];
 
 let failed = false;
@@ -154,5 +155,23 @@ function checkImapConfig(): Check {
   return pass(
     "IMAP config",
     `${env.IMAP_HOST}:${env.IMAP_PORT} secure=${String(env.IMAP_SECURE)}`
+  );
+}
+
+function checkEmailListVerifyConfig(): Check {
+  if (!env.EMAILLISTVERIFY_ENABLED) {
+    return pass("EmailListVerify config", "disabled");
+  }
+
+  if (!env.EMAILLISTVERIFY_API_KEY) {
+    return fail(
+      "EmailListVerify config",
+      "EMAILLISTVERIFY_API_KEY required when EMAILLISTVERIFY_ENABLED=true"
+    );
+  }
+
+  return pass(
+    "EmailListVerify config",
+    `enabled batch=${env.EMAILLISTVERIFY_BATCH_SIZE} timeout=${env.EMAILLISTVERIFY_TIMEOUT_MS}ms`
   );
 }

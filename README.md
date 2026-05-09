@@ -67,6 +67,8 @@ IMAP_SECURE=false
 IMAP_MAILBOXES=INBOX,Sent
 IMAP_LOOKBACK_DAYS=90
 TELEGRAM_ENABLED=false
+EMAILLISTVERIFY_ENABLED=false
+EMAILLISTVERIFY_API_KEY=
 ```
 
 The app assumes a single owner user. For production, enable the built-in Basic

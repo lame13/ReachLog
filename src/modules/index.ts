@@ -23,6 +23,13 @@ export const modules = [
     jobs: ["notifyFollowups", "notifyReplies", "notifyFailures"]
   },
   {
+    key: "emaillistverify",
+    label: "EmailListVerify",
+    enabled: env.EMAILLISTVERIFY_ENABLED,
+    envFlag: "EMAILLISTVERIFY_ENABLED",
+    jobs: ["emailVerify"]
+  },
+  {
     key: "contactForms",
     label: "Contact form tracking",
     enabled: true,

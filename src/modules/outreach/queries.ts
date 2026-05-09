@@ -162,6 +162,7 @@ export function getTargets(filters: TargetFilters = {}) {
       updatedAt: targets.updatedAt,
       contactName: contacts.name,
       contactEmail: contacts.email,
+      emailVerificationStatus: contacts.emailVerificationStatus,
       domain: contacts.domain
     })
     .from(targets)
@@ -250,6 +251,10 @@ export function getTargetDetail(id: string) {
       updatedAt: targets.updatedAt,
       contactName: contacts.name,
       contactEmail: contacts.email,
+      emailVerificationProvider: contacts.emailVerificationProvider,
+      emailVerificationStatus: contacts.emailVerificationStatus,
+      emailVerificationCheckedAt: contacts.emailVerificationCheckedAt,
+      emailVerificationError: contacts.emailVerificationError,
       domain: contacts.domain
     })
     .from(targets)
@@ -322,6 +327,7 @@ export function getFollowups(filter: "due" | "overdue" | "upcoming" | "all" = "a
       threadId: followupTasks.threadId,
       companyName: targets.companyName,
       contactEmail: contacts.email,
+      emailVerificationStatus: contacts.emailVerificationStatus,
       domain: contacts.domain,
       dueAt: followupTasks.dueAt,
       status: followupTasks.status,
@@ -497,6 +503,9 @@ export function getSendTarget(targetId: string | undefined) {
         doNotResend: targets.doNotResend,
         status: targets.status,
         contactEmail: contacts.email,
+        emailVerificationStatus: contacts.emailVerificationStatus,
+        emailVerificationCheckedAt: contacts.emailVerificationCheckedAt,
+        emailVerificationError: contacts.emailVerificationError,
         contactName: contacts.name,
         lastOutboundAt: threads.lastOutboundAt,
         subject: threads.subject

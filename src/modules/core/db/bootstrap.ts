@@ -15,6 +15,11 @@ CREATE TABLE IF NOT EXISTS contacts (
   name TEXT NOT NULL,
   email TEXT NOT NULL,
   domain TEXT NOT NULL,
+  email_verification_provider TEXT,
+  email_verification_status TEXT,
+  email_verification_checked_at TEXT,
+  email_verification_error TEXT,
+  email_verification_raw TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -184,9 +189,11 @@ CREATE TABLE IF NOT EXISTS module_settings (
 export function bootstrapDatabase(sqlite: SqliteDatabase) {
   sqlite.exec(schemaSql);
   ensureOutboundSendIdempotency(sqlite);
+  ensureEmailVerificationColumns(sqlite);
   recordSchemaVersion(sqlite, "0001", "bootstrap_schema");
   recordSchemaVersion(sqlite, "0002", "prod_safety_tables");
   recordSchemaVersion(sqlite, "0003", "outbound_send_idempotency");
+  recordSchemaVersion(sqlite, "0004", "contact_email_verification");
 
   const seeded = sqlite
     .prepare("SELECT COUNT(*) as count FROM contacts")
@@ -203,6 +210,22 @@ export function bootstrapDatabase(sqlite: SqliteDatabase) {
   }
 
   seedDatabase(sqlite);
+}
+
+function ensureEmailVerificationColumns(sqlite: SqliteDatabase) {
+  const columns = [
+    ["email_verification_provider", "TEXT"],
+    ["email_verification_status", "TEXT"],
+    ["email_verification_checked_at", "TEXT"],
+    ["email_verification_error", "TEXT"],
+    ["email_verification_raw", "TEXT"]
+  ] as const;
+
+  for (const [column, definition] of columns) {
+    if (!tableHasColumn(sqlite, "contacts", column)) {
+      sqlite.exec(`ALTER TABLE contacts ADD COLUMN ${column} ${definition}`);
+    }
+  }
 }
 
 function ensureOutboundSendIdempotency(sqlite: SqliteDatabase) {

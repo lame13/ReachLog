@@ -11,6 +11,10 @@ import {
   normalizeDomain,
   sourceDedupeKey
 } from "@/modules/outreach/dedupe";
+import {
+  markContactEmailVerificationPending,
+  verifyContactEmailOnce
+} from "@/modules/emailVerification/service";
 
 type TargetFormValues = {
   targetId?: string;
@@ -50,6 +54,8 @@ export async function createTargetAction(formData: FormData) {
 
   const targetId = createId("target");
 
+  let contactIdToVerify: string | null = null;
+
   const transaction = sqlite.transaction(() => {
     const contactId = upsertContact({
       contactId: null,
@@ -58,6 +64,7 @@ export async function createTargetAction(formData: FormData) {
       domain: inferDomain(values),
       now
     });
+    contactIdToVerify = contactId;
 
     sqlite
       .prepare(
@@ -90,6 +97,7 @@ export async function createTargetAction(formData: FormData) {
   });
 
   transaction();
+  await verifyContactEmailOnce({ contactId: contactIdToVerify, targetId });
   revalidatePath("/dashboard");
   revalidatePath("/targets");
   revalidatePath("/analytics");
@@ -126,6 +134,8 @@ export async function updateTargetAction(formData: FormData) {
     return;
   }
 
+  let contactIdToVerify: string | null = null;
+
   const transaction = sqlite.transaction(() => {
     const contactId = upsertContact({
       contactId: values.contactId,
@@ -134,6 +144,7 @@ export async function updateTargetAction(formData: FormData) {
       domain: inferDomain(values),
       now
     });
+    contactIdToVerify = contactId;
 
     sqlite
       .prepare(
@@ -170,6 +181,7 @@ export async function updateTargetAction(formData: FormData) {
   });
 
   transaction();
+  await verifyContactEmailOnce({ contactId: contactIdToVerify, targetId });
   revalidateTarget(targetId);
 }
 
@@ -271,23 +283,41 @@ function upsertContact({
 
   const existing = sqlite
     .prepare("SELECT id FROM contacts WHERE email = ?")
-    .get(email) as { id: string } | undefined;
+    .get(email) as { id: string; emailVerificationStatus: string | null } | undefined;
 
   if (existing) {
     sqlite
       .prepare(
-        "UPDATE contacts SET name = ?, domain = ?, updated_at = ? WHERE id = ?"
+        `
+        UPDATE contacts
+        SET name = ?,
+            domain = ?,
+            email_verification_provider = COALESCE(email_verification_provider, 'emaillistverify'),
+            email_verification_status = COALESCE(email_verification_status, 'pending'),
+            updated_at = ?
+        WHERE id = ?
+      `
       )
       .run(name, domain || email.split("@")[1] || "unknown", now, existing.id);
     return existing.id;
   }
 
   if (contactId) {
+    const current = sqlite
+      .prepare("SELECT email FROM contacts WHERE id = ?")
+      .get(contactId) as { email: string } | undefined;
+    const emailChanged = Boolean(current && current.email.toLowerCase() !== email);
+
     sqlite
       .prepare(
         "UPDATE contacts SET name = ?, email = ?, domain = ?, updated_at = ? WHERE id = ?"
       )
       .run(name, email, domain || email.split("@")[1] || "unknown", now, contactId);
+
+    if (emailChanged) {
+      markContactEmailVerificationPending(contactId, now);
+    }
+
     return contactId;
   }
 
@@ -296,8 +326,11 @@ function upsertContact({
   sqlite
     .prepare(
       `
-      INSERT INTO contacts (id, name, email, domain, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO contacts (
+        id, name, email, domain, email_verification_provider,
+        email_verification_status, created_at, updated_at
+      )
+      VALUES (?, ?, ?, ?, 'emaillistverify', 'pending', ?, ?)
     `
     )
     .run(newContactId, name, email, domain || email.split("@")[1] || "unknown", now, now);

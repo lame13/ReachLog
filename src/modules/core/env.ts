@@ -45,6 +45,11 @@ const EnvSchema = z.object({
   TELEGRAM_BOT_TOKEN: z.string().optional(),
   TELEGRAM_CHAT_ID: z.string().optional(),
 
+  EMAILLISTVERIFY_ENABLED: booleanFromString,
+  EMAILLISTVERIFY_API_KEY: z.string().optional(),
+  EMAILLISTVERIFY_TIMEOUT_MS: portFromString(15000),
+  EMAILLISTVERIFY_BATCH_SIZE: portFromString(25),
+
   BACKUP_DIR: z.string().default(".data/backups"),
   B2_REMOTE: z.string().optional()
 });
