@@ -1,0 +1,47 @@
+{
+  "name": "reachlog",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "db:studio": "drizzle-kit studio",
+    "db:generate": "drizzle-kit generate",
+    "worker:mail-sync": "tsx workers/mail-sync.ts",
+    "worker:followup-check": "tsx workers/followup-check.ts",
+    "worker:backup": "tsx workers/backup.ts"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "clsx": "^2.1.1",
+    "dotenv": "^16.4.7",
+    "drizzle-orm": "^0.38.4",
+    "imapflow": "^1.0.183",
+    "lucide-react": "^0.468.0",
+    "mailparser": "^3.7.2",
+    "next": "^15.1.4",
+    "nodemailer": "^6.9.16",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tailwind-merge": "^2.6.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/mailparser": "^3.4.5",
+    "@types/node": "^22.10.2",
+    "@types/nodemailer": "^6.4.17",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "autoprefixer": "^10.4.20",
+    "drizzle-kit": "^0.30.2",
+    "eslint": "^9.17.0",
+    "eslint-config-next": "^15.1.4",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

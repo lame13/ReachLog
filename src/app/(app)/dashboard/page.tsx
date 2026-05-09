@@ -1,0 +1,210 @@
+import Link from "next/link";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Clock3,
+  MailCheck,
+  Send
+} from "lucide-react";
+import { MetricCard } from "@/components/metric-card";
+import { SendEmailModal } from "@/components/send-email-modal";
+import { StatusPill } from "@/components/status-pill";
+import { formatDateTime, timeAgo } from "@/modules/core/dates";
+import { getDashboardData, getSendTarget } from "@/modules/outreach/queries";
+import { markDeadAction, snoozeFollowupAction } from "@/modules/followups/actions";
+
+type PageProps = {
+  searchParams?: Promise<{
+    sendTargetId?: string;
+  }>;
+};
+
+export default async function DashboardPage({ searchParams }: PageProps) {
+  const params = await searchParams;
+  const data = getDashboardData();
+  const sendTarget = getSendTarget(params?.sendTargetId);
+
+  return (
+    <>
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">Dashboard</h1>
+          <p className="mt-1 text-sm text-muted">
+            Replies, follow-ups, and recent mailbox movement.
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          icon={MailCheck}
+          label="Replies needing action"
+          tone="green"
+          value={data.stats.repliesNeedingAction}
+        />
+        <MetricCard
+          icon={Clock3}
+          label="Follow-ups due"
+          tone="amber"
+          value={data.stats.followupsDue}
+        />
+        <MetricCard
+          icon={AlertTriangle}
+          label="Overdue follow-ups"
+          tone="rose"
+          value={data.stats.overdueFollowups}
+        />
+        <MetricCard
+          icon={Send}
+          label="Sent, no reply"
+          value={data.stats.sentNoReply}
+        />
+      </div>
+
+      <section className="mt-6 rounded-lg border border-line bg-white shadow-sm">
+        <div className="flex items-center justify-between border-b border-line px-4 py-3">
+          <h2 className="font-semibold">Replies Needing Action</h2>
+          <Link className="text-sm font-medium text-accent" href="/targets">
+            View targets
+          </Link>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-[720px] text-sm">
+            <thead className="bg-panel text-left text-muted">
+              <tr>
+                <th className="px-4 py-3 font-medium">Company</th>
+                <th className="px-4 py-3 font-medium">Contact</th>
+                <th className="px-4 py-3 font-medium">Last reply</th>
+                <th className="px-4 py-3 font-medium">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.replies.map((reply) => (
+                <tr key={reply.threadId} className="border-t border-line">
+                  <td className="px-4 py-3 font-medium">
+                    <Link href={`/targets/${reply.targetId}`}>
+                      {reply.companyName}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3 text-muted">
+                    {reply.contactEmail ?? "form only"}
+                  </td>
+                  <td className="px-4 py-3">{timeAgo(reply.lastInboundAt)}</td>
+                  <td className="px-4 py-3">
+                    <StatusPill status={reply.status} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="mt-6 rounded-lg border border-line bg-white shadow-sm">
+        <div className="flex items-center justify-between border-b border-line px-4 py-3">
+          <h2 className="font-semibold">Follow-ups Due</h2>
+          <Link className="text-sm font-medium text-accent" href="/followups">
+            Open queue
+          </Link>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-[860px] text-sm">
+            <thead className="bg-panel text-left text-muted">
+              <tr>
+                <th className="px-4 py-3 font-medium">Company</th>
+                <th className="px-4 py-3 font-medium">Due</th>
+                <th className="px-4 py-3 font-medium">Last touch</th>
+                <th className="px-4 py-3 font-medium">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.followups.map((followup) => (
+                <tr key={followup.id} className="border-t border-line">
+                  <td className="px-4 py-3 font-medium">
+                    <Link href={`/targets/${followup.targetId}`}>
+                      {followup.companyName}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3">{formatDateTime(followup.dueAt)}</td>
+                  <td className="px-4 py-3 text-muted">
+                    {followup.lastOutboundAt
+                      ? `email sent ${timeAgo(followup.lastOutboundAt)}`
+                      : "form submitted"}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-2">
+                      <Link
+                        className="inline-flex h-9 items-center rounded-md bg-ink px-3 text-xs font-medium text-white"
+                        href={`/dashboard?sendTargetId=${followup.targetId}`}
+                      >
+                        Send
+                      </Link>
+                      <form action={snoozeFollowupAction}>
+                        <input name="followupId" type="hidden" value={followup.id} />
+                        <input name="targetId" type="hidden" value={followup.targetId} />
+                        <input name="days" type="hidden" value="3" />
+                        <button className="h-9 rounded-md border border-line px-3 text-xs font-medium hover:bg-panel">
+                          Snooze
+                        </button>
+                      </form>
+                      <form action={markDeadAction}>
+                        <input name="followupId" type="hidden" value={followup.id} />
+                        <input name="targetId" type="hidden" value={followup.targetId} />
+                        <button className="h-9 rounded-md border border-line px-3 text-xs font-medium hover:bg-panel">
+                          Dead
+                        </button>
+                      </form>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="mt-6 rounded-lg border border-line bg-white shadow-sm">
+        <div className="border-b border-line px-4 py-3">
+          <h2 className="font-semibold">Recently Imported Mail</h2>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-[760px] text-sm">
+            <thead className="bg-panel text-left text-muted">
+              <tr>
+                <th className="px-4 py-3 font-medium">Direction</th>
+                <th className="px-4 py-3 font-medium">From/To</th>
+                <th className="px-4 py-3 font-medium">Subject</th>
+                <th className="px-4 py-3 font-medium">Linked</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.recentMessages.map((message) => (
+                <tr key={message.id} className="border-t border-line">
+                  <td className="px-4 py-3 capitalize">
+                    <span className="inline-flex items-center gap-2">
+                      <CheckCircle2 className="size-4 text-emerald-700" />
+                      {message.direction}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-muted">
+                    {message.direction === "inbound"
+                      ? message.fromEmail
+                      : message.toEmail}
+                  </td>
+                  <td className="px-4 py-3">{message.subject}</td>
+                  <td className="px-4 py-3">
+                    <Link href={`/targets/${message.targetId}`}>
+                      {message.companyName}
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <SendEmailModal closeHref="/dashboard" target={sendTarget} />
+    </>
+  );
+}
