@@ -23,7 +23,8 @@ export function middleware(request: NextRequest) {
   const credentials = parseBasicAuth(header);
 
   if (
-    credentials?.username === expectedUser &&
+    credentials &&
+    credentials.username === expectedUser &&
     credentials.password === expectedPassword
   ) {
     return NextResponse.next();

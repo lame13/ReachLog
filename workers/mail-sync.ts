@@ -24,6 +24,21 @@ type ThreadMatch = {
   firstMessageId: string | null;
 };
 
+const DOMAIN_FALLBACK_DENYLIST = new Set([
+  "gmail.com",
+  "googlemail.com",
+  "outlook.com",
+  "hotmail.com",
+  "live.com",
+  "icloud.com",
+  "yahoo.com",
+  "proton.me",
+  "protonmail.com",
+  "hey.com",
+  "fastmail.com",
+  "mail.com"
+]);
+
 async function main() {
   if (!env.IMAP_ENABLED) {
     console.log("mail-sync skipped: IMAP_ENABLED=false");
@@ -349,6 +364,10 @@ function findTargetByParticipantEmail(email: string) {
     return null;
   }
 
+  if (DOMAIN_FALLBACK_DENYLIST.has(domain)) {
+    return null;
+  }
+
   return sqlite
     .prepare(
       `
@@ -389,21 +408,7 @@ function findThreadByTargetAndSubject(targetId: string, normalizedSubject: strin
     return bySubject;
   }
 
-  return sqlite
-    .prepare(
-      `
-      SELECT
-        id as threadId,
-        target_id as targetId,
-        contact_id as contactId,
-        first_message_id as firstMessageId
-      FROM threads
-      WHERE target_id = ?
-      ORDER BY updated_at DESC
-      LIMIT 1
-    `
-    )
-    .get(targetId) as ThreadMatch | undefined;
+  return null;
 }
 
 function createThread({
@@ -650,8 +655,12 @@ function getMessageDate(parsed: ParsedMail) {
 }
 
 function rawHeadersJson(parsed: ParsedMail) {
+  const entries = Array.from(parsed.headers.entries()) as Array<
+    [string, unknown]
+  >;
+
   return JSON.stringify(
-    Array.from(parsed.headers.entries()).map(([key, value]) => [
+    entries.map(([key, value]) => [
       key,
       Array.isArray(value) ? value.join(", ") : String(value)
     ])

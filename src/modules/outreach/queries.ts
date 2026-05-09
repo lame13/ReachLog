@@ -500,6 +500,8 @@ export function getSendTarget(targetId: string | undefined) {
       .leftJoin(contacts, eq(targets.contactId, contacts.id))
       .leftJoin(threads, eq(targets.id, threads.targetId))
       .where(eq(targets.id, targetId))
+      .orderBy(desc(threads.updatedAt))
+      .limit(1)
       .get() ?? null
   );
 }

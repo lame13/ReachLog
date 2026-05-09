@@ -4,6 +4,8 @@ export const analyticsModule = {
   jobs: [],
   eventTypes: [
     "target_created",
+    "target_imported",
+    "outreach_logged",
     "email_sent",
     "email_received",
     "form_submitted",

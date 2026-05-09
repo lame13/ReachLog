@@ -2,6 +2,7 @@
 
 import nodemailer from "nodemailer";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { env } from "@/modules/core/env";
 import { getSqlite } from "@/modules/core/db/client";
 import { createId } from "@/modules/core/ids";
@@ -27,6 +28,7 @@ export async function sendNowAction(formData: FormData) {
   const body = String(formData.get("body") ?? "");
   const sendKey =
     String(formData.get("sendKey") ?? "").trim() || createId("sendkey");
+  const returnTo = getSafeReturnTo(String(formData.get("returnTo") ?? ""));
   const createFollowup = formData.get("createFollowup") === "on";
   const followupDays = Math.max(1, Number(formData.get("followupDays") ?? 3));
 
@@ -96,24 +98,15 @@ export async function sendNowAction(formData: FormData) {
         : undefined
   });
 
+  let result: nodemailer.SentMessageInfo;
+
   try {
-    const result = await transporter.sendMail({
+    result = await transporter.sendMail({
       from: getFromEmail(),
       to: target.contactEmail,
       subject,
       text: body,
       messageId
-    });
-
-    persistSentEmail({
-      target: { ...target, contactEmail },
-      subject,
-      body,
-      messageId,
-      outboundSendId: outboundSendId.id,
-      rawResult: result,
-      createFollowup,
-      followupDays
     });
   } catch (error) {
     markOutboundSendFailed(
@@ -129,7 +122,33 @@ export async function sendNowAction(formData: FormData) {
     return;
   }
 
+  try {
+    persistSentEmail({
+      target: { ...target, contactEmail },
+      subject,
+      body,
+      messageId,
+      outboundSendId: outboundSendId.id,
+      rawResult: result,
+      createFollowup,
+      followupDays
+    });
+  } catch (error) {
+    markOutboundSendPersistenceFailed(
+      outboundSendId.id,
+      error instanceof Error ? error.message : "unknown_error"
+    );
+    createTargetEvent(targetId, "send_persist_failed_after_smtp_accept", {
+      messageId,
+      subject,
+      error: error instanceof Error ? error.message : "unknown_error"
+    });
+    revalidateAfterSend(targetId);
+    return;
+  }
+
   revalidateAfterSend(targetId);
+  redirect(returnTo || `/targets/${targetId}`);
 }
 
 function revalidateAfterSend(targetId: string) {
@@ -438,6 +457,32 @@ function markOutboundSendFailed(outboundSendId: string, error: string) {
     `
     )
     .run(error, new Date().toISOString(), outboundSendId);
+}
+
+function markOutboundSendPersistenceFailed(outboundSendId: string, error: string) {
+  const now = new Date().toISOString();
+
+  getSqlite()
+    .prepare(
+      `
+      UPDATE outbound_sends
+      SET status = 'smtp_accepted_persist_failed',
+          attempts = attempts + 1,
+          sent_at = ?,
+          last_error = ?,
+          updated_at = ?
+      WHERE id = ?
+    `
+    )
+    .run(now, error, now, outboundSendId);
+}
+
+function getSafeReturnTo(value: string) {
+  if (!value.startsWith("/") || value.startsWith("//")) {
+    return "";
+  }
+
+  return value;
 }
 
 function getFromEmail() {

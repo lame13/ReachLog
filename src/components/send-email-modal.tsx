@@ -56,6 +56,7 @@ export function SendEmailModal({
         <form className="space-y-4 p-5">
           <input type="hidden" name="targetId" value={target.id} />
           <input type="hidden" name="sendKey" value={sendKey} />
+          <input type="hidden" name="returnTo" value={closeHref} />
           <label className="block">
             <span className="mb-1 block text-sm font-medium">To</span>
             <input

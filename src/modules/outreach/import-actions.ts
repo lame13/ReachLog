@@ -37,6 +37,7 @@ export type ImportPreviewRow = {
   status: string;
   nextAction: string;
   followUpDate: string;
+  sourceTimestamp: string;
   doNotResend: boolean;
   dedupeOnlyDoNotResend: boolean;
   result: ImportPreviewResult;
@@ -281,6 +282,14 @@ function normalizeImportRow(
     value("company_name", "company", "account", "target") ||
     (domain ? domain.split(".")[0] : email || "Unknown target");
   const followUpDate = value("follow_up_date", "followup_date", "next_follow_up");
+  const sourceTimestamp = parseSourceTimestamp(
+    firstNonEmpty(
+      value("date_sent"),
+      value("date_posted"),
+      value("date_updated"),
+      value("date_recorded")
+    )
+  ) ?? "";
   const nextAction = value("next_action");
   const rawDoNotResend = parseBoolean(value("do_not_resend", "do_not_contact"));
   const status =
@@ -318,6 +327,7 @@ function normalizeImportRow(
       status,
       nextAction,
       followUpDate,
+      sourceTimestamp,
       doNotResend,
       dedupeOnlyDoNotResend,
       result: "invalid",
@@ -343,6 +353,7 @@ function normalizeImportRow(
       status,
       nextAction,
       followUpDate,
+      sourceTimestamp,
       doNotResend,
       dedupeOnlyDoNotResend,
       result: "invalid",
@@ -368,6 +379,7 @@ function normalizeImportRow(
       status,
       nextAction,
       followUpDate,
+      sourceTimestamp,
       doNotResend,
       dedupeOnlyDoNotResend,
       result: "duplicate in file",
@@ -396,6 +408,7 @@ function normalizeImportRow(
     status,
     nextAction,
     followUpDate,
+    sourceTimestamp,
     doNotResend,
     dedupeOnlyDoNotResend,
     result: dedupe.result,
@@ -487,12 +500,13 @@ function insertImportRows(rows: ImportPreviewRow[]) {
         continue;
       }
 
+      const sourceAt = row.sourceTimestamp || now;
       const contactId = row.email
         ? upsertContact({
             email: row.email,
             name: row.name || row.companyName,
             domain: row.domain,
-            now
+            now: sourceAt
           })
         : null;
       const targetId = createId("target");
@@ -518,14 +532,15 @@ function insertImportRows(rows: ImportPreviewRow[]) {
           row.dedupeKey,
           status,
           row.doNotResend ? 1 : 0,
-          now,
-          now
+          sourceAt,
+          sourceAt
         );
 
-      createTargetEvent(targetId, "target_created", row, now);
+      createTargetEvent(targetId, "target_imported", row, now);
+      createTargetEvent(targetId, "outreach_logged", row, sourceAt);
 
       if (row.sourceType === "contact_form" && row.formUrl) {
-        const submittedAt = now;
+        const submittedAt = sourceAt;
 
         sqlite
           .prepare(
@@ -551,12 +566,12 @@ function insertImportRows(rows: ImportPreviewRow[]) {
             now
           );
 
-        createTargetEvent(targetId, "form_submitted", row, now);
+        createTargetEvent(targetId, "form_submitted", row, submittedAt);
       }
 
       const dueAt = parseFollowUpDate(row.followUpDate);
 
-      if (dueAt && !row.doNotResend && !isSendBlockedStatus(row.status)) {
+      if (dueAt && shouldCreateImportedFollowup(row)) {
         sqlite
           .prepare(
             `
@@ -646,6 +661,7 @@ function createTargetEvent(
         dedupeKey: row.dedupeKey,
         nextAction: row.nextAction || null,
         followUpDate: row.followUpDate || null,
+        sourceTimestamp: row.sourceTimestamp || null,
         doNotResend: row.doNotResend,
         dedupeOnlyDoNotResend: row.dedupeOnlyDoNotResend
       }),
@@ -794,6 +810,10 @@ function parseBoolean(value: string) {
   return ["1", "true", "yes", "y", "on"].includes(value.trim().toLowerCase());
 }
 
+function firstNonEmpty(...values: string[]) {
+  return values.find((value) => value.trim()) ?? "";
+}
+
 function inferStatus({
   followUpDate,
   nextAction,
@@ -836,17 +856,80 @@ function shouldImportHardSendBlock({
   return isSendBlockedStatus(status) || hasExplicitHardBlockAction(nextAction);
 }
 
+function shouldCreateImportedFollowup(row: ImportPreviewRow) {
+  const status = row.status.toLowerCase();
+  const action = row.nextAction.toLowerCase();
+
+  if (!row.followUpDate) {
+    return false;
+  }
+
+  if (row.doNotResend) {
+    return false;
+  }
+
+  if (isSendBlockedStatus(status)) {
+    return false;
+  }
+
+  if (row.sourceType === "contact_form") {
+    return false;
+  }
+
+  if (status.includes("followup_sent") || status.includes("follow-up_sent")) {
+    return false;
+  }
+
+  if (status.includes("community_reply") || status.includes("sent via form")) {
+    return false;
+  }
+
+  if (
+    action.includes("monitor only") ||
+    action.includes("do not debate") ||
+    action.includes("do not pitch") ||
+    action.includes("wait only") ||
+    action.includes("no second follow-up") ||
+    action.includes("unless they reply")
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
 function hasExplicitHardBlockAction(nextAction: string) {
   const normalized = nextAction.toLowerCase();
 
+  if (
+    normalized.includes("unless they reply") ||
+    normalized.includes("unless jane replies") ||
+    normalized.includes("no second follow-up") ||
+    normalized.includes("wait only") ||
+    normalized.includes("monitor only")
+  ) {
+    return false;
+  }
+
   return (
-    normalized.includes("do not send") ||
     normalized.includes("never send") ||
-    normalized.includes("dead")
+    normalized.includes("do not contact") ||
+    normalized.includes("do not outreach") ||
+    normalized.includes("dead") ||
+    normalized.includes("bounced") ||
+    normalized.includes("blocked")
   );
 }
 
+function parseSourceTimestamp(value: string) {
+  return parseHistoricalTimestamp(value);
+}
+
 function parseFollowUpDate(value: string) {
+  return parseHistoricalTimestamp(value);
+}
+
+function parseHistoricalTimestamp(value: string) {
   const trimmed = value.trim();
 
   if (!trimmed) {
