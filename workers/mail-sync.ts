@@ -45,7 +45,7 @@ async function main() {
     return;
   }
 
-  await withWorkerLock("mail-sync", 240, runMailSync);
+  await withWorkerLock("mail-sync", 1800, runMailSync);
 }
 
 async function runMailSync() {
@@ -487,6 +487,9 @@ async function insertMessage({
   const fromEmail = firstAddress(parsed.from) ?? "unknown";
   const toEmail = addressText(parsed.to) || "unknown";
   const referencesHeader = getReferencesHeader(parsed);
+  const isBounce =
+    direction === "inbound" &&
+    isDeliveryFailureMessage(parsed, subject, fromEmail);
 
   const transaction = sqlite.transaction(() => {
     sqlite
@@ -524,25 +527,32 @@ async function insertMessage({
       threadId: thread.threadId,
       direction,
       messageDate,
-      messageId
+      messageId,
+      isBounce
     });
 
-    sqlite
-      .prepare(
+    if (isBounce) {
+      sqlite
+        .prepare("UPDATE targets SET status = 'bounced_dead_address', updated_at = ? WHERE id = ?")
+        .run(now, thread.targetId);
+    } else {
+      sqlite
+        .prepare(
+          `
+          UPDATE targets
+          SET status = CASE
+                WHEN ? = 1 THEN 'replied'
+                WHEN lower(status) IN ('new', 'dedupe protected', 'follow-up due', 'queued', 'replied') THEN 'sent'
+                ELSE status
+              END,
+              updated_at = ?
+          WHERE id = ?
         `
-        UPDATE targets
-        SET status = CASE
-              WHEN ? = 1 THEN 'replied'
-              WHEN lower(status) IN ('new', 'dedupe protected', 'follow-up due', 'queued') THEN 'sent'
-              ELSE status
-            END,
-            updated_at = ?
-        WHERE id = ?
-      `
-      )
-      .run(state.latestIsInbound ? 1 : 0, now, thread.targetId);
+        )
+        .run(state.latestIsInbound ? 1 : 0, now, thread.targetId);
+    }
 
-    if (state.latestIsInbound) {
+    if (state.latestIsInbound || isBounce) {
       sqlite
         .prepare(
           `
@@ -566,13 +576,18 @@ async function insertMessage({
       .run(
         createId("event"),
         thread.targetId,
-        direction === "inbound" ? "reply_received" : "email_sent",
+        isBounce
+          ? "email_bounced"
+          : direction === "inbound"
+            ? "reply_received"
+            : "email_sent",
         JSON.stringify({
           mailbox,
           messageId,
           subject,
           from: fromEmail,
-          to: toEmail
+          to: toEmail,
+          bounced: isBounce
         }),
         now
       );
@@ -582,7 +597,7 @@ async function insertMessage({
 
   const state = transaction();
 
-  if (direction === "inbound" && state.latestIsInbound) {
+  if (direction === "inbound" && state.latestIsInbound && !isBounce) {
     await sendTelegramMessage(`Reply received: ${fromEmail}\n${subject}`);
   }
 }
@@ -591,12 +606,14 @@ function updateThreadAfterMessage({
   threadId,
   direction,
   messageDate,
-  messageId
+  messageId,
+  isBounce
 }: {
   threadId: string;
   direction: "inbound" | "outbound";
   messageDate: string;
   messageId: string;
+  isBounce: boolean;
 }) {
   const sqlite = getSqlite();
   const now = new Date().toISOString();
@@ -663,7 +680,7 @@ function updateThreadAfterMessage({
       `
       UPDATE threads
       SET last_message_id = ?,
-          status = ?,
+          status = CASE WHEN ? = 1 THEN 'bounced' ELSE ? END,
           next_followup_at = CASE WHEN ? = 1 THEN NULL ELSE next_followup_at END,
           updated_at = ?
       WHERE id = ?
@@ -671,8 +688,9 @@ function updateThreadAfterMessage({
     )
     .run(
       state.latestMessageId ?? messageId,
+      isBounce ? 1 : 0,
       latestIsInbound ? "replied" : "waiting",
-      latestIsInbound ? 1 : 0,
+      latestIsInbound || isBounce ? 1 : 0,
       now,
       threadId
     );
@@ -740,6 +758,29 @@ function getReferencesHeader(parsed: ParsedMail) {
 
 function getMessageDate(parsed: ParsedMail) {
   return parsed.date?.toISOString() ?? new Date().toISOString();
+}
+
+function isDeliveryFailureMessage(
+  parsed: ParsedMail,
+  subject: string,
+  fromEmail: string
+) {
+  const normalizedSubject = subject.toLowerCase();
+  const normalizedFrom = fromEmail.toLowerCase();
+  const autoSubmitted = String(parsed.headers.get("auto-submitted") ?? "").toLowerCase();
+  const contentType = String(parsed.headers.get("content-type") ?? "").toLowerCase();
+
+  return (
+    normalizedFrom.includes("mailer-daemon") ||
+    normalizedFrom.includes("postmaster") ||
+    autoSubmitted.includes("auto") ||
+    contentType.includes("delivery-status") ||
+    normalizedSubject.includes("delivery status notification") ||
+    normalizedSubject.includes("mail delivery failed") ||
+    normalizedSubject.includes("undeliverable") ||
+    normalizedSubject.includes("delivery failure") ||
+    normalizedSubject.includes("returned mail")
+  );
 }
 
 function rawHeadersJson(parsed: ParsedMail) {

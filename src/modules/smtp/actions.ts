@@ -68,6 +68,7 @@ export async function sendNowAction(formData: FormData) {
 
   const contactEmail = target.contactEmail;
   const messageId = createLocalMessageId();
+  const replyToMessageId = target.lastMessageId ?? target.firstMessageId ?? undefined;
 
   if (!env.SMTP_ENABLED) {
     createTargetEvent(targetId, "send_blocked", {
@@ -118,7 +119,9 @@ export async function sendNowAction(formData: FormData) {
       to: target.contactEmail,
       subject,
       text: body,
-      messageId
+      messageId,
+      inReplyTo: replyToMessageId,
+      references: replyToMessageId ? [replyToMessageId] : undefined
     });
   } catch (error) {
     markOutboundSendFailed(
@@ -140,6 +143,7 @@ export async function sendNowAction(formData: FormData) {
       subject,
       body,
       messageId,
+      replyToMessageId,
       outboundSendId: outboundSendId.id,
       rawResult: result,
       createFollowup,
@@ -182,6 +186,7 @@ type SendableTarget = {
   threadId: string | null;
   threadSubject: string | null;
   firstMessageId: string | null;
+  lastMessageId: string | null;
 };
 
 function getSendableTarget(targetId: string) {
@@ -198,7 +203,8 @@ function getSendableTarget(targetId: string) {
         contacts.email_verification_status as emailVerificationStatus,
         threads.id as threadId,
         threads.subject as threadSubject,
-        threads.first_message_id as firstMessageId
+        threads.first_message_id as firstMessageId,
+        threads.last_message_id as lastMessageId
       FROM targets
       LEFT JOIN contacts ON contacts.id = targets.contact_id
       LEFT JOIN threads ON threads.target_id = targets.id
@@ -215,6 +221,7 @@ function persistSentEmail({
   subject,
   body,
   messageId,
+  replyToMessageId,
   outboundSendId,
   rawResult,
   createFollowup,
@@ -224,6 +231,7 @@ function persistSentEmail({
   subject: string;
   body: string;
   messageId: string;
+  replyToMessageId: string | undefined;
   outboundSendId: string;
   rawResult: nodemailer.SentMessageInfo;
   createFollowup: boolean;
@@ -303,8 +311,8 @@ function persistSentEmail({
         subject,
         body,
         messageId,
-        target.firstMessageId,
-        target.firstMessageId,
+        replyToMessageId ?? null,
+        replyToMessageId ?? null,
         now,
         JSON.stringify({
           accepted: rawResult.accepted,

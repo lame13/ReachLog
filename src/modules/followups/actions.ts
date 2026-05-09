@@ -156,9 +156,15 @@ export async function markDeadAction(formData: FormData) {
   const transaction = sqlite.transaction(() => {
     sqlite
       .prepare(
-        "UPDATE followup_tasks SET status = 'completed', completed_at = ? WHERE id = ?"
+        `
+        UPDATE followup_tasks
+        SET status = CASE WHEN id = ? THEN 'completed' ELSE 'cancelled' END,
+            completed_at = ?
+        WHERE target_id = ?
+          AND status = 'open'
+      `
       )
-      .run(now, followupId);
+      .run(followupId, now, targetId);
 
     sqlite
       .prepare("UPDATE targets SET status = 'dead', updated_at = ? WHERE id = ?")
