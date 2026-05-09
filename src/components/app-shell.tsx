@@ -68,17 +68,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Link href="/dashboard" className="font-semibold md:hidden">
               ReachLog
             </Link>
-            <div className="relative ml-auto w-full max-w-xl">
+            <form action="/targets" className="relative ml-auto w-full max-w-xl">
               <Search
                 className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted"
                 aria-hidden="true"
               />
               <input
                 className="h-10 w-full rounded-md border border-line bg-panel pl-9 pr-3 text-sm outline-none transition focus:border-accent focus:bg-white"
+                name="q"
                 placeholder="Search email, domain, company..."
                 type="search"
               />
-            </div>
+            </form>
           </div>
         </header>
         <main className="mx-auto max-w-7xl px-4 py-6 md:px-6">{children}</main>

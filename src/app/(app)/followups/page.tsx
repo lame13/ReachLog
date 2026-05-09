@@ -3,19 +3,31 @@ import { Send } from "lucide-react";
 import { SendEmailModal } from "@/components/send-email-modal";
 import { StatusPill } from "@/components/status-pill";
 import { formatDateTime, timeAgo } from "@/modules/core/dates";
-import { markDeadAction, snoozeFollowupAction } from "@/modules/followups/actions";
+import {
+  completeFollowupAction,
+  markDeadAction,
+  snoozeFollowupAction
+} from "@/modules/followups/actions";
 import { getFollowups, getSendTarget } from "@/modules/outreach/queries";
 
 type PageProps = {
   searchParams?: Promise<{
+    filter?: "due" | "overdue" | "upcoming" | "all";
     sendTargetId?: string;
   }>;
 };
 
 export default async function FollowupsPage({ searchParams }: PageProps) {
   const params = await searchParams;
-  const followups = getFollowups("all");
+  const activeFilter = params?.filter ?? "due";
+  const followups = getFollowups(activeFilter);
   const sendTarget = getSendTarget(params?.sendTargetId);
+  const tabs = [
+    { label: "Due Today", filter: "due" },
+    { label: "Overdue", filter: "overdue" },
+    { label: "Upcoming", filter: "upcoming" },
+    { label: "All Open", filter: "all" }
+  ] as const;
 
   return (
     <>
@@ -27,17 +39,18 @@ export default async function FollowupsPage({ searchParams }: PageProps) {
       </div>
 
       <div className="mb-4 flex flex-wrap gap-2">
-        {["Due Today", "Overdue", "Upcoming", "Snoozed"].map((tab, index) => (
-          <button
-            key={tab}
-            className={`h-9 rounded-md border px-3 text-sm font-medium ${
-              index === 0
+        {tabs.map((tab) => (
+          <Link
+            key={tab.filter}
+            className={`inline-flex h-9 items-center rounded-md border px-3 text-sm font-medium ${
+              activeFilter === tab.filter
                 ? "border-ink bg-ink text-white"
                 : "border-line bg-white text-muted hover:bg-panel hover:text-ink"
             }`}
+            href={`/followups?filter=${tab.filter}`}
           >
-            {tab}
-          </button>
+            {tab.label}
+          </Link>
         ))}
       </div>
 
@@ -55,55 +68,70 @@ export default async function FollowupsPage({ searchParams }: PageProps) {
               </tr>
             </thead>
             <tbody>
-              {followups.map((followup) => (
-                <tr key={followup.id} className="border-t border-line align-top">
-                  <td className="px-4 py-3">
-                    <Link className="font-medium" href={`/targets/${followup.targetId}`}>
-                      {followup.companyName}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 text-muted">
-                    {followup.contactEmail ?? "form only"}
-                  </td>
-                  <td className="px-4 py-3">{formatDateTime(followup.dueAt)}</td>
-                  <td className="px-4 py-3 text-muted">
-                    {followup.lastInboundAt
-                      ? `reply ${timeAgo(followup.lastInboundAt)}`
-                      : followup.lastOutboundAt
-                        ? `email sent ${timeAgo(followup.lastOutboundAt)}`
-                        : "form submitted"}
-                  </td>
-                  <td className="px-4 py-3">
-                    <StatusPill status={followup.status} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-2">
-                      <Link
-                        className="inline-flex h-9 items-center gap-2 rounded-md bg-ink px-3 text-xs font-medium text-white"
-                        href={`/followups?sendTargetId=${followup.targetId}`}
-                      >
-                        <Send className="size-3.5" aria-hidden="true" />
-                        Send
+              {followups.length ? (
+                followups.map((followup) => (
+                  <tr key={followup.id} className="border-t border-line align-top">
+                    <td className="px-4 py-3">
+                      <Link className="font-medium" href={`/targets/${followup.targetId}`}>
+                        {followup.companyName}
                       </Link>
-                      <form action={snoozeFollowupAction}>
-                        <input name="followupId" type="hidden" value={followup.id} />
-                        <input name="targetId" type="hidden" value={followup.targetId} />
-                        <input name="days" type="hidden" value="3" />
-                        <button className="h-9 rounded-md border border-line px-3 text-xs font-medium hover:bg-panel">
-                          Snooze
-                        </button>
-                      </form>
-                      <form action={markDeadAction}>
-                        <input name="followupId" type="hidden" value={followup.id} />
-                        <input name="targetId" type="hidden" value={followup.targetId} />
-                        <button className="h-9 rounded-md border border-line px-3 text-xs font-medium hover:bg-panel">
-                          Dead
-                        </button>
-                      </form>
-                    </div>
+                    </td>
+                    <td className="px-4 py-3 text-muted">
+                      {followup.contactEmail ?? "form only"}
+                    </td>
+                    <td className="px-4 py-3">{formatDateTime(followup.dueAt)}</td>
+                    <td className="px-4 py-3 text-muted">
+                      {followup.lastInboundAt
+                        ? `reply ${timeAgo(followup.lastInboundAt)}`
+                        : followup.lastOutboundAt
+                          ? `email sent ${timeAgo(followup.lastOutboundAt)}`
+                          : "form submitted"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <StatusPill status={followup.status} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap gap-2">
+                        <Link
+                          className="inline-flex h-9 items-center gap-2 rounded-md bg-ink px-3 text-xs font-medium text-white"
+                          href={`/followups?filter=${activeFilter}&sendTargetId=${followup.targetId}`}
+                        >
+                          <Send className="size-3.5" aria-hidden="true" />
+                          Send
+                        </Link>
+                        <form action={completeFollowupAction}>
+                          <input name="followupId" type="hidden" value={followup.id} />
+                          <input name="targetId" type="hidden" value={followup.targetId} />
+                          <button className="h-9 rounded-md border border-line px-3 text-xs font-medium hover:bg-panel">
+                            Complete
+                          </button>
+                        </form>
+                        <form action={snoozeFollowupAction}>
+                          <input name="followupId" type="hidden" value={followup.id} />
+                          <input name="targetId" type="hidden" value={followup.targetId} />
+                          <input name="days" type="hidden" value="3" />
+                          <button className="h-9 rounded-md border border-line px-3 text-xs font-medium hover:bg-panel">
+                            Snooze
+                          </button>
+                        </form>
+                        <form action={markDeadAction}>
+                          <input name="followupId" type="hidden" value={followup.id} />
+                          <input name="targetId" type="hidden" value={followup.targetId} />
+                          <button className="h-9 rounded-md border border-line px-3 text-xs font-medium hover:bg-panel">
+                            Dead
+                          </button>
+                        </form>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr className="border-t border-line">
+                  <td className="px-4 py-10 text-center text-muted" colSpan={6}>
+                    No open follow-ups in this view.
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>

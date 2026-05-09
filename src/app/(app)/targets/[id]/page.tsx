@@ -4,9 +4,18 @@ import { Ban, FileText, Mail, Send } from "lucide-react";
 import { SendEmailModal } from "@/components/send-email-modal";
 import { StatusPill } from "@/components/status-pill";
 import { formatDateTime } from "@/modules/core/dates";
-import { addTargetNoteAction, updateDoNotResendAction } from "@/modules/outreach/actions";
+import {
+  addTargetNoteAction,
+  updateDoNotResendAction,
+  updateTargetAction
+} from "@/modules/outreach/actions";
 import { getSendTarget, getTargetDetail } from "@/modules/outreach/queries";
-import { markDeadAction, snoozeFollowupAction } from "@/modules/followups/actions";
+import {
+  completeFollowupAction,
+  createFollowupAction,
+  markDeadAction,
+  snoozeFollowupAction
+} from "@/modules/followups/actions";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -27,6 +36,7 @@ export default async function TargetDetailPage({
   }
 
   const { target, threads, messages, followups, forms, timeline } = detail;
+  const tomorrow = getDateInputValue(1);
 
   return (
     <>
@@ -131,6 +141,29 @@ export default async function TargetDetailPage({
         <aside className="space-y-6">
           <section className="rounded-lg border border-line bg-white shadow-sm">
             <div className="border-b border-line px-4 py-3">
+              <h2 className="font-semibold">Edit Target</h2>
+            </div>
+            <form action={updateTargetAction} className="space-y-3 p-4">
+              <input name="targetId" type="hidden" value={target.id} />
+              <input name="contactId" type="hidden" value={target.contactId ?? ""} />
+              <DetailField label="Company" name="companyName" required value={target.companyName} />
+              <DetailField label="Contact name" name="contactName" value={target.contactName ?? ""} />
+              <DetailField label="Email" name="email" type="email" value={target.contactEmail ?? ""} />
+              <DetailField label="Website" name="websiteUrl" type="url" value={target.websiteUrl ?? ""} />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <DetailField label="Source" name="sourceType" value={target.sourceType} />
+                <DetailField label="Status" name="status" value={target.status} />
+              </div>
+              <DetailField label="Source URL" name="sourceUrl" type="url" value={target.sourceUrl ?? ""} />
+              <DetailField label="Dedupe key" name="dedupeKey" value={target.dedupeKey} />
+              <button className="h-9 rounded-md border border-line px-3 text-xs font-medium hover:bg-panel">
+                Save target
+              </button>
+            </form>
+          </section>
+
+          <section className="rounded-lg border border-line bg-white shadow-sm">
+            <div className="border-b border-line px-4 py-3">
               <h2 className="font-semibold">Note</h2>
             </div>
             <form action={addTargetNoteAction} className="space-y-3 p-4">
@@ -178,38 +211,86 @@ export default async function TargetDetailPage({
             <div className="border-b border-line px-4 py-3">
               <h2 className="font-semibold">Follow-up</h2>
             </div>
+            <form action={createFollowupAction} className="space-y-3 border-b border-line p-4">
+              <input name="targetId" type="hidden" value={target.id} />
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-muted">Thread</span>
+                <select
+                  className="h-9 w-full rounded-md border border-line bg-white px-3 text-sm outline-none focus:border-accent"
+                  name="threadId"
+                >
+                  <option value="">No thread</option>
+                  {threads.map((thread) => (
+                    <option key={thread.id} value={thread.id}>
+                      {thread.subject}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="grid grid-cols-[1fr_110px] gap-3">
+                <DetailField label="Due date" name="dueDate" type="date" value={tomorrow} />
+                <DetailField label="Time" name="dueTime" type="time" value="09:00" />
+              </div>
+              <DetailField
+                label="Subject"
+                name="suggestedSubject"
+                value={threads[0]?.subject ? `Re: ${threads[0].subject.replace(/^Re:\s*/i, "")}` : ""}
+              />
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-muted">Body</span>
+                <textarea
+                  className="min-h-24 w-full resize-y rounded-md border border-line px-3 py-2 text-sm outline-none focus:border-accent"
+                  name="suggestedBody"
+                  defaultValue="Hi, just wanted to follow up on this."
+                />
+              </label>
+              <button className="h-9 rounded-md border border-line px-3 text-xs font-medium hover:bg-panel">
+                Schedule follow-up
+              </button>
+            </form>
             <div className="divide-y divide-line">
-              {followups.map((followup) => (
-                <div key={followup.id} className="space-y-3 p-4 text-sm">
-                  <div className="flex items-center justify-between gap-2">
-                    <StatusPill status={followup.status} />
-                    <span className="text-muted">
-                      {formatDateTime(followup.dueAt)}
-                    </span>
-                  </div>
-                  <div className="font-medium">{followup.suggestedSubject}</div>
-                  <p className="text-muted">{followup.suggestedBody}</p>
-                  {followup.status === "open" && (
-                    <div className="flex flex-wrap gap-2">
-                      <form action={snoozeFollowupAction}>
-                        <input name="followupId" type="hidden" value={followup.id} />
-                        <input name="targetId" type="hidden" value={target.id} />
-                        <input name="days" type="hidden" value="3" />
-                        <button className="h-9 rounded-md border border-line px-3 text-xs font-medium hover:bg-panel">
-                          Snooze
-                        </button>
-                      </form>
-                      <form action={markDeadAction}>
-                        <input name="followupId" type="hidden" value={followup.id} />
-                        <input name="targetId" type="hidden" value={target.id} />
-                        <button className="h-9 rounded-md border border-line px-3 text-xs font-medium hover:bg-panel">
-                          Dead
-                        </button>
-                      </form>
+              {followups.length ? (
+                followups.map((followup) => (
+                  <div key={followup.id} className="space-y-3 p-4 text-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <StatusPill status={followup.status} />
+                      <span className="text-muted">
+                        {formatDateTime(followup.dueAt)}
+                      </span>
                     </div>
-                  )}
-                </div>
-              ))}
+                    <div className="font-medium">{followup.suggestedSubject}</div>
+                    <p className="text-muted">{followup.suggestedBody}</p>
+                    {followup.status === "open" && (
+                      <div className="flex flex-wrap gap-2">
+                        <form action={completeFollowupAction}>
+                          <input name="followupId" type="hidden" value={followup.id} />
+                          <input name="targetId" type="hidden" value={target.id} />
+                          <button className="h-9 rounded-md border border-line px-3 text-xs font-medium hover:bg-panel">
+                            Complete
+                          </button>
+                        </form>
+                        <form action={snoozeFollowupAction}>
+                          <input name="followupId" type="hidden" value={followup.id} />
+                          <input name="targetId" type="hidden" value={target.id} />
+                          <input name="days" type="hidden" value="3" />
+                          <button className="h-9 rounded-md border border-line px-3 text-xs font-medium hover:bg-panel">
+                            Snooze
+                          </button>
+                        </form>
+                        <form action={markDeadAction}>
+                          <input name="followupId" type="hidden" value={followup.id} />
+                          <input name="targetId" type="hidden" value={target.id} />
+                          <button className="h-9 rounded-md border border-line px-3 text-xs font-medium hover:bg-panel">
+                            Dead
+                          </button>
+                        </form>
+                      </div>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <div className="p-4 text-sm text-muted">No follow-ups yet.</div>
+              )}
             </div>
           </section>
         </aside>
@@ -218,6 +299,39 @@ export default async function TargetDetailPage({
       <SendEmailModal closeHref={`/targets/${target.id}`} target={sendTarget} />
     </>
   );
+}
+
+function DetailField({
+  label,
+  name,
+  value,
+  type = "text",
+  required = false
+}: {
+  label: string;
+  name: string;
+  value: string;
+  type?: string;
+  required?: boolean;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-xs font-medium text-muted">{label}</span>
+      <input
+        className="h-9 w-full rounded-md border border-line px-3 text-sm outline-none focus:border-accent"
+        defaultValue={value}
+        name={name}
+        required={required}
+        type={type}
+      />
+    </label>
+  );
+}
+
+function getDateInputValue(daysFromNow: number) {
+  const date = new Date();
+  date.setDate(date.getDate() + daysFromNow);
+  return date.toISOString().slice(0, 10);
 }
 
 function getEventDetail(payloadJson: string | null) {

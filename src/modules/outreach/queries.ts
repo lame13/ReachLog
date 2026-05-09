@@ -1,5 +1,5 @@
 import { and, desc, eq, inArray, lte, sql } from "drizzle-orm";
-import { getDb } from "@/modules/core/db/client";
+import { getDb, getSqlite } from "@/modules/core/db/client";
 import {
   contactFormSubmissions,
   contacts,
@@ -14,6 +14,13 @@ import { endOfTodayIso, startOfTodayIso } from "@/modules/core/dates";
 
 export type TargetListItem = Awaited<ReturnType<typeof getTargets>>[number];
 export type FollowupListItem = Awaited<ReturnType<typeof getFollowups>>[number];
+export type TargetFilters = {
+  q?: string;
+  status?: string;
+  source?: string;
+  domain?: string;
+  flag?: string;
+};
 
 export function getDashboardData() {
   const db = getDb();
@@ -100,10 +107,10 @@ export function getDashboardData() {
   };
 }
 
-export function getTargets() {
+export function getTargets(filters: TargetFilters = {}) {
   const db = getDb();
 
-  return db
+  const rows = db
     .select({
       id: targets.id,
       companyName: targets.companyName,
@@ -122,6 +129,68 @@ export function getTargets() {
     .leftJoin(contacts, eq(targets.contactId, contacts.id))
     .orderBy(desc(targets.updatedAt))
     .all();
+
+  return rows.filter((target) => {
+    const q = filters.q?.trim().toLowerCase();
+    const status = filters.status?.trim();
+    const source = filters.source?.trim();
+    const domain = filters.domain?.trim().toLowerCase();
+    const flag = filters.flag?.trim();
+
+    if (q) {
+      const haystack = [
+        target.companyName,
+        target.contactName,
+        target.contactEmail,
+        target.domain,
+        target.websiteUrl,
+        target.sourceUrl,
+        target.dedupeKey,
+        target.status
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      if (!haystack.includes(q)) {
+        return false;
+      }
+    }
+
+    if (status && target.status !== status) {
+      return false;
+    }
+
+    if (source && target.sourceType !== source) {
+      return false;
+    }
+
+    if (domain && target.domain?.toLowerCase() !== domain) {
+      return false;
+    }
+
+    if (flag === "do_not_resend" && !target.doNotResend) {
+      return false;
+    }
+
+    if (flag === "contact_form" && target.sourceType !== "contact_form") {
+      return false;
+    }
+
+    return true;
+  });
+}
+
+export function getTargetFilterOptions() {
+  const targets = getTargets();
+  const unique = (values: Array<string | null>) =>
+    Array.from(new Set(values.filter(Boolean) as string[])).sort();
+
+  return {
+    statuses: unique(targets.map((target) => target.status)),
+    sources: unique(targets.map((target) => target.sourceType)),
+    domains: unique(targets.map((target) => target.domain))
+  };
 }
 
 export function getTargetDetail(id: string) {
@@ -250,6 +319,7 @@ export function getFollowups(filter: "due" | "overdue" | "upcoming" | "all" = "a
 
 export function getAnalyticsData() {
   const db = getDb();
+  const sqlite = getSqlite();
 
   const eventCounts = db
     .select({
@@ -281,10 +351,87 @@ export function getAnalyticsData() {
     .orderBy(desc(sql`count(*)`))
     .all();
 
+  const metrics = sqlite
+    .prepare(
+      `
+      SELECT
+        (SELECT COUNT(*) FROM targets) as totalTargets,
+        (SELECT COUNT(DISTINCT target_id) FROM threads WHERE last_outbound_at IS NOT NULL) as touchedTargets,
+        (SELECT COUNT(DISTINCT target_id) FROM threads WHERE last_inbound_at IS NOT NULL) as repliedTargets,
+        (SELECT COUNT(*) FROM targets WHERE source_type = 'contact_form') as formTargets,
+        (SELECT COUNT(*) FROM followup_tasks WHERE status = 'open') as openFollowups,
+        (SELECT COUNT(*) FROM followup_tasks WHERE status = 'open' AND due_at <= ?) as dueFollowups,
+        (SELECT COUNT(*) FROM targets WHERE do_not_resend = 1) as blockedTargets,
+        (SELECT COUNT(*) FROM targets WHERE status = 'dead') as deadTargets
+    `
+    )
+    .get(endOfTodayIso()) as {
+    totalTargets: number;
+    touchedTargets: number;
+    repliedTargets: number;
+    formTargets: number;
+    openFollowups: number;
+    dueFollowups: number;
+    blockedTargets: number;
+    deadTargets: number;
+  };
+
+  const sourcePerformance = sqlite
+    .prepare(
+      `
+      SELECT
+        targets.source_type as sourceType,
+        COUNT(DISTINCT targets.id) as total,
+        COUNT(DISTINCT CASE WHEN threads.last_outbound_at IS NOT NULL THEN targets.id END) as sent,
+        COUNT(DISTINCT CASE WHEN threads.last_inbound_at IS NOT NULL THEN targets.id END) as replied,
+        COUNT(DISTINCT CASE WHEN targets.status = 'dead' THEN targets.id END) as dead
+      FROM targets
+      LEFT JOIN threads ON threads.target_id = targets.id
+      GROUP BY targets.source_type
+      ORDER BY total DESC
+    `
+    )
+    .all() as Array<{
+    sourceType: string;
+    total: number;
+    sent: number;
+    replied: number;
+    dead: number;
+  }>;
+
+  const recentEvents = sqlite
+    .prepare(
+      `
+      SELECT
+        events.id,
+        events.event_type as eventType,
+        events.created_at as createdAt,
+        events.payload_json as payloadJson,
+        targets.id as targetId,
+        targets.company_name as companyName
+      FROM events
+      LEFT JOIN targets ON targets.id = events.entity_id
+        AND events.entity_type = 'target'
+      ORDER BY events.created_at DESC
+      LIMIT 10
+    `
+    )
+    .all() as Array<{
+    id: string;
+    eventType: string;
+    createdAt: string;
+    payloadJson: string | null;
+    targetId: string | null;
+    companyName: string | null;
+  }>;
+
   return {
     eventCounts,
     sourceCounts,
-    statusCounts
+    statusCounts,
+    metrics,
+    sourcePerformance,
+    recentEvents
   };
 }
 

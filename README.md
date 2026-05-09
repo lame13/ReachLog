@@ -66,11 +66,11 @@ The app assumes a single owner user. Put Cloudflare Access or Caddy `basic_auth`
 ## Pages
 
 - `/dashboard` shows replies needing action, follow-ups due, sent/no-reply counts, and recent mail.
-- `/targets` lists outreach targets with status, source, and dedupe keys.
-- `/targets/[id]` shows the target timeline, thread, contact forms, and follow-up state.
-- `/followups` is the manual follow-up queue.
+- `/targets` lists, searches, filters, and creates outreach targets with status, source, and dedupe keys.
+- `/targets/[id]` edits target/contact fields and shows timeline, thread, contact forms, notes, and follow-up state.
+- `/followups` is the manual follow-up queue with due/overdue/upcoming filters and completion actions.
 - `/import` is the CSV intake and dedupe preview surface.
-- `/analytics` summarizes event, source, and status counts.
+- `/analytics` summarizes funnel metrics, source performance, recent events, and event/source/status counts.
 - `/settings/modules` toggles module settings stored in SQLite.
 
 ## Database
@@ -159,10 +159,9 @@ HTTPS reverse proxy -> Next.js app -> SQLite file
 
 Near-term:
 
-- Better analytics from the `events` table.
-- Target creation/edit forms outside CSV import.
-- Manual follow-up creation and completion outside the send flow.
-- Search wiring in the app shell.
+- Contact form submission creation from the UI.
+- Mailbox settings validation from the UI.
+- Export views for targets, messages, and follow-ups.
 
 Later:
 
