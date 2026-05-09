@@ -146,6 +146,7 @@ CREATE TABLE IF NOT EXISTS outbound_sends (
   subject TEXT NOT NULL,
   body_text TEXT NOT NULL,
   message_id TEXT NOT NULL,
+  send_key TEXT,
   status TEXT NOT NULL,
   attempts INTEGER NOT NULL DEFAULT 0,
   last_error TEXT,
@@ -182,8 +183,10 @@ CREATE TABLE IF NOT EXISTS module_settings (
 
 export function bootstrapDatabase(sqlite: SqliteDatabase) {
   sqlite.exec(schemaSql);
+  ensureOutboundSendIdempotency(sqlite);
   recordSchemaVersion(sqlite, "0001", "bootstrap_schema");
   recordSchemaVersion(sqlite, "0002", "prod_safety_tables");
+  recordSchemaVersion(sqlite, "0003", "outbound_send_idempotency");
 
   const seeded = sqlite
     .prepare("SELECT COUNT(*) as count FROM contacts")
@@ -200,6 +203,28 @@ export function bootstrapDatabase(sqlite: SqliteDatabase) {
   }
 
   seedDatabase(sqlite);
+}
+
+function ensureOutboundSendIdempotency(sqlite: SqliteDatabase) {
+  if (!tableHasColumn(sqlite, "outbound_sends", "send_key")) {
+    sqlite.exec("ALTER TABLE outbound_sends ADD COLUMN send_key TEXT");
+  }
+
+  sqlite.exec(
+    "CREATE UNIQUE INDEX IF NOT EXISTS outbound_sends_send_key_unique ON outbound_sends(send_key)"
+  );
+}
+
+function tableHasColumn(
+  sqlite: SqliteDatabase,
+  tableName: string,
+  columnName: string
+) {
+  const columns = sqlite
+    .prepare(`PRAGMA table_info(${tableName})`)
+    .all() as Array<{ name: string }>;
+
+  return columns.some((column) => column.name === columnName);
 }
 
 function recordSchemaVersion(sqlite: SqliteDatabase, version: string, name: string) {

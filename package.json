@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit --project tsconfig.typecheck.json",
     "db:studio": "drizzle-kit studio",
     "db:generate": "drizzle-kit generate",
+    "prod:check": "tsx scripts/prod/check.ts",
     "worker:mail-sync": "tsx workers/mail-sync.ts",
     "worker:list-mailboxes": "tsx workers/list-mailboxes.ts",
     "worker:followup-check": "tsx workers/followup-check.ts",

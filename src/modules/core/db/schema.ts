@@ -205,6 +205,7 @@ export const outboundSends = sqliteTable(
     subject: text("subject").notNull(),
     bodyText: text("body_text").notNull(),
     messageId: text("message_id").notNull(),
+    sendKey: text("send_key"),
     status: text("status").notNull(),
     attempts: integer("attempts").notNull().default(0),
     lastError: text("last_error"),
@@ -215,6 +216,9 @@ export const outboundSends = sqliteTable(
   (table) => ({
     messageIdUnique: uniqueIndex("outbound_sends_message_id_unique").on(
       table.messageId
+    ),
+    sendKeyUnique: uniqueIndex("outbound_sends_send_key_unique").on(
+      table.sendKey
     ),
     statusIdx: index("outbound_sends_status_idx").on(table.status),
     targetIdx: index("outbound_sends_target_idx").on(table.targetId)

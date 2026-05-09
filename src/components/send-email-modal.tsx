@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Save, Send, X } from "lucide-react";
 import { saveDraftAction, sendNowAction } from "@/modules/smtp/actions";
 import { formatDateTime } from "@/modules/core/dates";
+import { createId } from "@/modules/core/ids";
 
 type SendTarget = {
   id: string;
@@ -30,6 +31,7 @@ export function SendEmailModal({
       : `Re: ${target.subject}`
     : `Quick question about ${target.companyName}`;
   const canSend = Boolean(target.contactEmail) && !target.doNotResend;
+  const sendKey = createId("sendkey");
 
   return (
     <div className="fixed inset-0 z-40 grid place-items-center bg-black/40 px-4">
@@ -50,6 +52,7 @@ export function SendEmailModal({
 
         <form className="space-y-4 p-5">
           <input type="hidden" name="targetId" value={target.id} />
+          <input type="hidden" name="sendKey" value={sendKey} />
           <label className="block">
             <span className="mb-1 block text-sm font-medium">To</span>
             <input

@@ -5,6 +5,7 @@
     "src/**/*.ts",
     "src/**/*.tsx",
     "workers/**/*.ts",
+    "scripts/**/*.ts",
     "drizzle.config.ts",
     "tailwind.config.ts"
   ],

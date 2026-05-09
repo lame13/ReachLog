@@ -247,6 +247,7 @@ function getOutboundSendsExport(params: URLSearchParams) {
         outbound_sends.subject,
         outbound_sends.body_text as bodyText,
         outbound_sends.message_id as messageId,
+        outbound_sends.send_key as sendKey,
         outbound_sends.status,
         outbound_sends.attempts,
         outbound_sends.last_error as lastError,

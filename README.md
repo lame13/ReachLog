@@ -59,7 +59,9 @@ Important flags:
 TZ=Asia/Bangkok
 SEED_DEMO_DATA=false
 SMTP_ENABLED=false
+SMTP_SECURE=false
 IMAP_ENABLED=false
+IMAP_SECURE=false
 IMAP_MAILBOXES=INBOX,Sent
 IMAP_LOOKBACK_DAYS=90
 TELEGRAM_ENABLED=false
@@ -76,6 +78,12 @@ APP_BASIC_AUTH_PASSWORD=use-a-long-random-password
 
 You can still put Cloudflare Access, Forge Nginx auth, or Caddy `basic_auth` in
 front as an extra gate.
+
+Before a production import, run:
+
+```bash
+npm run prod:check
+```
 
 ## Pages
 

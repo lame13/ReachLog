@@ -24,6 +24,8 @@ export async function sendNowAction(formData: FormData) {
   const targetId = String(formData.get("targetId") ?? "");
   const subject = String(formData.get("subject") ?? "");
   const body = String(formData.get("body") ?? "");
+  const sendKey =
+    String(formData.get("sendKey") ?? "").trim() || createId("sendkey");
   const createFollowup = formData.get("createFollowup") === "on";
   const followupDays = Math.max(1, Number(formData.get("followupDays") ?? 3));
 
@@ -59,13 +61,24 @@ export async function sendNowAction(formData: FormData) {
     contactEmail,
     subject,
     body,
-    messageId
+    messageId,
+    sendKey
   });
+
+  if (!outboundSendId.inserted) {
+    createTargetEvent(targetId, "send_duplicate_blocked", {
+      sendKey,
+      outboundSendId: outboundSendId.id,
+      subject
+    });
+    revalidateAfterSend(targetId);
+    return;
+  }
 
   const transporter = nodemailer.createTransport({
     host: env.SMTP_HOST,
     port: env.SMTP_PORT,
-    secure: false,
+    secure: env.SMTP_SECURE,
     auth:
       env.SMTP_USER && env.SMTP_PASS
         ? {
@@ -89,14 +102,14 @@ export async function sendNowAction(formData: FormData) {
       subject,
       body,
       messageId,
-      outboundSendId,
+      outboundSendId: outboundSendId.id,
       rawResult: result,
       createFollowup,
       followupDays
     });
   } catch (error) {
     markOutboundSendFailed(
-      outboundSendId,
+      outboundSendId.id,
       error instanceof Error ? error.message : "unknown_error"
     );
     createTargetEvent(targetId, "send_failed", {
@@ -105,7 +118,7 @@ export async function sendNowAction(formData: FormData) {
       error: error instanceof Error ? error.message : "unknown_error"
     });
     revalidateAfterSend(targetId);
-    throw error;
+    return;
   }
 
   revalidateAfterSend(targetId);
@@ -340,25 +353,29 @@ function createPendingOutboundSend({
   contactEmail,
   subject,
   body,
-  messageId
+  messageId,
+  sendKey
 }: {
   target: SendableTarget;
   contactEmail: string;
   subject: string;
   body: string;
   messageId: string;
+  sendKey: string;
 }) {
   const now = new Date().toISOString();
   const outboundSendId = createId("outbound");
 
-  getSqlite()
+  const sqlite = getSqlite();
+  const result = sqlite
     .prepare(
       `
       INSERT INTO outbound_sends (
-        id, target_id, thread_id, to_email, subject, body_text, message_id,
+        id, target_id, thread_id, to_email, subject, body_text, message_id, send_key,
         status, attempts, last_error, sent_at, created_at, updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 0, NULL, NULL, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, NULL, NULL, ?, ?)
+      ON CONFLICT(send_key) DO NOTHING
     `
     )
     .run(
@@ -369,17 +386,33 @@ function createPendingOutboundSend({
       subject,
       body,
       messageId,
+      sendKey,
       now,
       now
     );
 
+  if (result.changes === 0) {
+    const existing = sqlite
+      .prepare("SELECT id FROM outbound_sends WHERE send_key = ?")
+      .get(sendKey) as { id: string } | undefined;
+
+    return {
+      id: existing?.id ?? outboundSendId,
+      inserted: false
+    };
+  }
+
   createTargetEvent(target.id, "send_queued", {
     outboundSendId,
     messageId,
+    sendKey,
     subject
   });
 
-  return outboundSendId;
+  return {
+    id: outboundSendId,
+    inserted: true
+  };
 }
 
 function markOutboundSendFailed(outboundSendId: string, error: string) {

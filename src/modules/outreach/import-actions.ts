@@ -165,6 +165,7 @@ function buildPreviewRows(csvText: string) {
 
   const [headers, ...records] = parsedRows;
   const normalizedHeaders = headers.map(normalizeHeader);
+  assertSupportedImportHeaders(normalizedHeaders);
   const seenKeys = new Set<string>();
 
   return records
@@ -172,6 +173,35 @@ function buildPreviewRows(csvText: string) {
       normalizeImportRow(normalizedHeaders, record, index + 2, seenKeys)
     )
     .filter((row) => row.companyName || row.email || row.websiteUrl || row.sourceUrl);
+}
+
+function assertSupportedImportHeaders(headers: string[]) {
+  const unsupportedTrackerImports = [
+    {
+      name: "marketplace bids",
+      columns: ["project_title"]
+    },
+    {
+      name: "WP.org threads",
+      columns: ["thread_title"]
+    },
+    {
+      name: "platform statuses",
+      columns: ["platform_status"]
+    }
+  ];
+
+  const match = unsupportedTrackerImports.find((candidate) =>
+    candidate.columns.some((column) => headers.includes(column))
+  );
+
+  if (!match) {
+    return;
+  }
+
+  throw new Error(
+    `This looks like a ${match.name} tracker CSV. Import only outreach log, dedupe index, or queue status CSVs here for now.`
+  );
 }
 
 function normalizeImportRow(

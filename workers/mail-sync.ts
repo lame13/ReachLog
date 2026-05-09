@@ -37,7 +37,7 @@ async function runMailSync() {
   const client = new ImapFlow({
     host: env.IMAP_HOST,
     port: env.IMAP_PORT,
-    secure: false,
+    secure: env.IMAP_SECURE,
     auth: {
       user: env.IMAP_USER ?? "",
       pass: env.IMAP_PASS ?? ""

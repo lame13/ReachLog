@@ -143,6 +143,7 @@ APP_BASIC_AUTH_PASSWORD=use-a-long-random-password
 SMTP_ENABLED=false
 SMTP_HOST=127.0.0.1
 SMTP_PORT=1025
+SMTP_SECURE=false
 SMTP_USER=
 SMTP_PASS=
 SMTP_FROM=
@@ -150,6 +151,7 @@ SMTP_FROM=
 IMAP_ENABLED=false
 IMAP_HOST=127.0.0.1
 IMAP_PORT=1143
+IMAP_SECURE=false
 IMAP_USER=
 IMAP_PASS=
 IMAP_MAILBOXES=INBOX,Sent
@@ -181,6 +183,7 @@ Use this as the Forge deployment script:
 cd /home/forge/reachlog.example.com
 
 npm ci
+npm run prod:check
 npm run build
 mkdir -p .next/standalone/.next
 cp -R .next/static .next/standalone/.next/static
@@ -265,6 +268,7 @@ backup directory to `B2_REMOTE` when configured.
 Install and test the required CLI tools on the VDS:
 
 ```bash
+npm run prod:check
 which sqlite3
 which gzip
 which rclone

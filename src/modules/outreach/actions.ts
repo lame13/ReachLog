@@ -185,14 +185,36 @@ export async function updateDoNotResendAction(formData: FormData) {
   const now = new Date().toISOString();
 
   const transaction = sqlite.transaction(() => {
-    sqlite
-      .prepare("UPDATE targets SET do_not_resend = ?, updated_at = ? WHERE id = ?")
-      .run(enabled ? 1 : 0, now, targetId);
+    let cancelledFollowups = 0;
+
+    if (enabled) {
+      sqlite
+        .prepare(
+          "UPDATE targets SET do_not_resend = 1, status = 'dead', updated_at = ? WHERE id = ?"
+        )
+        .run(now, targetId);
+
+      cancelledFollowups = sqlite
+        .prepare(
+          `
+          UPDATE followup_tasks
+          SET status = 'cancelled',
+              completed_at = ?
+          WHERE target_id = ?
+            AND status = 'open'
+        `
+        )
+        .run(now, targetId).changes;
+    } else {
+      sqlite
+        .prepare("UPDATE targets SET do_not_resend = 0, updated_at = ? WHERE id = ?")
+        .run(now, targetId);
+    }
 
     insertTargetEvent(
       targetId,
       enabled ? "do_not_resend_enabled" : "do_not_resend_disabled",
-      { enabled }
+      { enabled, cancelledFollowups }
     );
   });
 
