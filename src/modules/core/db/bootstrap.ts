@@ -1,4 +1,5 @@
 import type BetterSqlite3 from "better-sqlite3";
+import { env } from "@/modules/core/env";
 
 type SqliteDatabase = BetterSqlite3.Database;
 
@@ -189,6 +190,11 @@ export function bootstrapDatabase(sqlite: SqliteDatabase) {
     .get() as { count: number };
 
   if (seeded.count > 0) {
+    ensureModuleSettings(sqlite);
+    return;
+  }
+
+  if (!env.SEED_DEMO_DATA) {
     ensureModuleSettings(sqlite);
     return;
   }

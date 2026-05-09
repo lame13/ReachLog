@@ -33,6 +33,10 @@ export type ImportPreviewRow = {
   messageText: string;
   notes: string;
   dedupeKey: string;
+  status: string;
+  nextAction: string;
+  followUpDate: string;
+  doNotResend: boolean;
   result: ImportPreviewResult;
   reason: string;
 };
@@ -187,20 +191,50 @@ function normalizeImportRow(
     return "";
   };
 
-  const email = value("email", "contact_email").toLowerCase();
-  const websiteUrl = value("website_url", "website", "url");
-  const sourceType = value("source_type", "source") || "csv";
-  const sourceUrl = value("source_url", "source_link", "thread_url", "project_url");
-  const formUrl = value("form_url", "contact_form_url") || sourceUrl;
+  const contactType = value("contact_type").toLowerCase();
+  const contactValue = value("contact_value");
+  const email = (
+    value("email", "contact_email") ||
+    (contactType === "email" ? contactValue : "")
+  ).toLowerCase();
+  const websiteUrl =
+    value("website_url", "website", "url") ||
+    (contactType === "website" && looksLikeUrl(contactValue) ? contactValue : "");
+  const sourceType =
+    value("source_type", "source", "source_group", "channel") ||
+    (contactType === "form" || contactType === "contact_form" ? "contact_form" : "csv");
+  const sourceUrl = value(
+    "source_url",
+    "source_link",
+    "thread_url",
+    "project_url",
+    "source_reference",
+    "source_ref"
+  );
+  const formUrl =
+    value("form_url", "contact_form_url") ||
+    (sourceType === "contact_form" && looksLikeUrl(contactValue) ? contactValue : "") ||
+    sourceUrl;
   const name = value("name", "contact_name");
-  const subject = value("subject");
-  const messageText = value("message_text", "message", "body");
+  const subject = value("subject", "subject_or_form_context");
+  const messageText = value(
+    "message_text",
+    "message",
+    "body",
+    "message_text_or_summary",
+    "reply_text_or_summary"
+  );
   const notes = value("notes", "note");
-  const domain = inferDomain(email, websiteUrl, sourceUrl, formUrl);
+  const domain =
+    value("domain", "domain_key") || inferDomain(email, websiteUrl, sourceUrl, formUrl);
   const companyName =
-    value("company_name", "company", "account") ||
+    value("company_name", "company", "account", "target") ||
     (domain ? domain.split(".")[0] : email || "Unknown target");
-  const dedupeKey = inferDedupeKey({
+  const followUpDate = value("follow_up_date", "followup_date", "next_follow_up");
+  const nextAction = value("next_action");
+  const doNotResend = parseBoolean(value("do_not_resend", "do_not_contact"));
+  const status = value("status") || inferStatus({ followUpDate, nextAction, doNotResend, sourceType });
+  const dedupeKey = value("dedupe_key") || inferDedupeKey({
     email,
     domain,
     sourceType,
@@ -223,6 +257,10 @@ function normalizeImportRow(
       messageText,
       notes,
       dedupeKey: "",
+      status,
+      nextAction,
+      followUpDate,
+      doNotResend,
       result: "invalid",
       reason: "No email, website, source URL, or form URL to dedupe."
     };
@@ -243,6 +281,10 @@ function normalizeImportRow(
       messageText,
       notes,
       dedupeKey,
+      status,
+      nextAction,
+      followUpDate,
+      doNotResend,
       result: "duplicate in file",
       reason: "Another row in this CSV has the same dedupe key."
     };
@@ -266,6 +308,10 @@ function normalizeImportRow(
     messageText,
     notes,
     dedupeKey,
+    status,
+    nextAction,
+    followUpDate,
+    doNotResend,
     result: dedupe.result,
     reason: dedupe.reason
   };
@@ -362,7 +408,7 @@ function insertImportRows(rows: ImportPreviewRow[]) {
           })
         : null;
       const targetId = createId("target");
-      const status = row.sourceType === "contact_form" ? "form submitted" : "new";
+      const status = row.status || (row.sourceType === "contact_form" ? "form submitted" : "new");
 
       sqlite
         .prepare(
@@ -371,7 +417,7 @@ function insertImportRows(rows: ImportPreviewRow[]) {
             id, contact_id, company_name, website_url, source_type, source_url,
             dedupe_key, status, do_not_resend, created_at, updated_at
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `
         )
         .run(
@@ -383,6 +429,7 @@ function insertImportRows(rows: ImportPreviewRow[]) {
           row.sourceUrl || null,
           row.dedupeKey,
           status,
+          row.doNotResend ? 1 : 0,
           now,
           now
         );
@@ -417,6 +464,32 @@ function insertImportRows(rows: ImportPreviewRow[]) {
           );
 
         createTargetEvent(targetId, "form_submitted", row, now);
+      }
+
+      const dueAt = parseFollowUpDate(row.followUpDate);
+
+      if (dueAt && !row.doNotResend) {
+        sqlite
+          .prepare(
+            `
+            INSERT INTO followup_tasks (
+              id, thread_id, target_id, due_at, status, suggested_subject,
+              suggested_body, notification_sent_at, notification_channel,
+              notification_status, completed_at, created_at
+            )
+            VALUES (?, NULL, ?, ?, 'open', ?, ?, NULL, NULL, NULL, NULL, ?)
+          `
+          )
+          .run(
+            createId("followup"),
+            targetId,
+            dueAt,
+            row.subject || `Follow up with ${row.companyName}`,
+            row.messageText || row.nextAction || "Follow up on this outreach.",
+            now
+          );
+
+        createTargetEvent(targetId, "followup_created", row, now);
       }
 
       inserted += 1;
@@ -482,7 +555,10 @@ function createTargetEvent(
         rowNumber: row.rowNumber,
         sourceType: row.sourceType,
         sourceUrl: row.sourceUrl || null,
-        dedupeKey: row.dedupeKey
+        dedupeKey: row.dedupeKey,
+        nextAction: row.nextAction || null,
+        followUpDate: row.followUpDate || null,
+        doNotResend: row.doNotResend
       }),
       now
     );
@@ -623,4 +699,54 @@ function safeContactFormDedupeKey(formUrl: string) {
   } catch {
     return sourceDedupeKey("form", formUrl);
   }
+}
+
+function parseBoolean(value: string) {
+  return ["1", "true", "yes", "y", "on"].includes(value.trim().toLowerCase());
+}
+
+function inferStatus({
+  followUpDate,
+  nextAction,
+  doNotResend,
+  sourceType
+}: {
+  followUpDate: string;
+  nextAction: string;
+  doNotResend: boolean;
+  sourceType: string;
+}) {
+  if (doNotResend) {
+    return "dead";
+  }
+
+  if (followUpDate || nextAction.toLowerCase().includes("follow")) {
+    return "follow-up due";
+  }
+
+  if (sourceType === "contact_form") {
+    return "form submitted";
+  }
+
+  return "new";
+}
+
+function parseFollowUpDate(value: string) {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return new Date(`${trimmed}T09:00:00`).toISOString();
+  }
+
+  const parsed = new Date(trimmed);
+
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+function looksLikeUrl(value: string) {
+  return /^https?:\/\//i.test(value.trim());
 }

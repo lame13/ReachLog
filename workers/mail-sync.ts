@@ -9,8 +9,8 @@ import {
   extractThreadHeaderCandidates,
   normalizeSubject
 } from "../src/modules/mailbox/threading";
-
-const mailboxes = ["INBOX", "Sent"];
+import { normalizeDomain } from "../src/modules/outreach/dedupe";
+import { sendTelegramMessage } from "../src/modules/telegram/notify";
 
 type TargetMatch = {
   targetId: string;
@@ -47,7 +47,7 @@ async function runMailSync() {
   await client.connect();
 
   try {
-    for (const mailbox of mailboxes) {
+    for (const mailbox of getConfiguredMailboxes()) {
       await importMailbox(client, mailbox);
     }
   } finally {
@@ -71,10 +71,15 @@ async function importMailbox(client: ImapFlow, mailbox: string) {
       return;
     }
 
-    const range = cursor.lastUid > 0 ? `${cursor.lastUid + 1}:*` : "1:*";
+    const fetchRange = await getFetchRange(client, cursor.lastUid, uidNext);
+
+    if (!fetchRange) {
+      console.log(`mail-sync ${mailbox}: no messages in lookback window`);
+      return;
+    }
 
     for await (const message of client.fetch(
-      range,
+      fetchRange,
       {
         envelope: true,
         source: true
@@ -131,7 +136,7 @@ async function importMailbox(client: ImapFlow, mailbox: string) {
         continue;
       }
 
-      insertMessage({
+      await insertMessage({
         parsed,
         thread,
         mailbox,
@@ -148,6 +153,41 @@ async function importMailbox(client: ImapFlow, mailbox: string) {
   }
 
   console.log(`mail-sync ${mailbox}: ${imported} new, ${skipped} skipped`);
+}
+
+function getConfiguredMailboxes() {
+  return env.IMAP_MAILBOXES.split(",")
+    .map((mailbox) => mailbox.trim())
+    .filter(Boolean);
+}
+
+async function getFetchRange(
+  client: ImapFlow,
+  lastUid: number,
+  uidNext: number | null
+) {
+  if (lastUid > 0) {
+    return `${lastUid + 1}:*`;
+  }
+
+  if (env.IMAP_LOOKBACK_DAYS <= 0) {
+    return "1:*";
+  }
+
+  const since = new Date();
+  since.setDate(since.getDate() - env.IMAP_LOOKBACK_DAYS);
+
+  const uids = await client.search({ since }, { uid: true });
+
+  if (!uids || uids.length === 0) {
+    if (uidNext && uidNext > 1 && client.mailbox) {
+      updateMailboxCursor(client.mailbox.path, Number(client.mailbox.uidValidity), uidNext - 1);
+    }
+
+    return null;
+  }
+
+  return uids;
 }
 
 function getMailboxCursor(mailbox: string, uidValidity: number | null) {
@@ -225,7 +265,7 @@ function findOrCreateThread({
     return null;
   }
 
-  const target = findTargetByEmail(participantEmail);
+  const target = findTargetByParticipantEmail(participantEmail);
 
   if (!target) {
     return null;
@@ -282,8 +322,9 @@ function findThreadByHeaders(headers: {
     .get(...candidates) as ThreadMatch | undefined;
 }
 
-function findTargetByEmail(email: string) {
-  return getSqlite()
+function findTargetByParticipantEmail(email: string) {
+  const sqlite = getSqlite();
+  const exactMatch = sqlite
     .prepare(
       `
       SELECT
@@ -297,6 +338,32 @@ function findTargetByEmail(email: string) {
     `
     )
     .get(email.toLowerCase()) as TargetMatch | undefined;
+
+  if (exactMatch) {
+    return exactMatch;
+  }
+
+  const domain = getEmailDomain(email);
+
+  if (!domain) {
+    return null;
+  }
+
+  return sqlite
+    .prepare(
+      `
+      SELECT
+        targets.id as targetId,
+        contacts.id as contactId
+      FROM targets
+      LEFT JOIN contacts ON contacts.id = targets.contact_id
+      WHERE lower(contacts.domain) = ?
+         OR lower(targets.website_url) LIKE ?
+      ORDER BY targets.updated_at DESC
+      LIMIT 1
+    `
+    )
+    .get(domain, `%${domain}%`) as TargetMatch | undefined;
 }
 
 function findThreadByTargetAndSubject(targetId: string, normalizedSubject: string) {
@@ -394,7 +461,7 @@ function createThread({
   };
 }
 
-function insertMessage({
+async function insertMessage({
   parsed,
   thread,
   mailbox,
@@ -514,6 +581,10 @@ function insertMessage({
   });
 
   transaction();
+
+  if (direction === "inbound") {
+    await sendTelegramMessage(`Reply received: ${fromEmail}\n${subject}`);
+  }
 }
 
 function createUnlinkedMailEvent({
@@ -549,6 +620,11 @@ function createUnlinkedMailEvent({
 
 function firstAddress(addressObject: ParsedMail["from"]) {
   return addressObject?.value[0]?.address?.toLowerCase() ?? null;
+}
+
+function getEmailDomain(email: string) {
+  const domain = email.split("@").pop();
+  return domain ? normalizeDomain(domain) : null;
 }
 
 function addressText(

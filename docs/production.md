@@ -22,9 +22,11 @@ Do not expose the Next.js server directly to the public internet.
 Use absolute production paths:
 
 ```text
+TZ=Asia/Bangkok
 DATABASE_PATH=/data/outreach-crm/app.sqlite
 BACKUP_DIR=/data/outreach-crm/backups
 B2_REMOTE=b2:your-bucket/outreach-crm/
+SEED_DEMO_DATA=false
 
 APP_BASIC_AUTH_ENABLED=true
 APP_BASIC_AUTH_USER=owner
@@ -127,10 +129,12 @@ In Forge's environment editor for the site, set:
 
 ```text
 NODE_ENV=production
+TZ=Asia/Bangkok
 PORT=3007
 DATABASE_PATH=/data/outreach-crm/app.sqlite
 BACKUP_DIR=/data/outreach-crm/backups
 B2_REMOTE=b2:your-bucket/outreach-crm/
+SEED_DEMO_DATA=false
 
 APP_BASIC_AUTH_ENABLED=true
 APP_BASIC_AUTH_USER=owner
@@ -148,6 +152,8 @@ IMAP_HOST=127.0.0.1
 IMAP_PORT=1143
 IMAP_USER=
 IMAP_PASS=
+IMAP_MAILBOXES=INBOX,Sent
+IMAP_LOOKBACK_DAYS=90
 
 TELEGRAM_ENABLED=false
 TELEGRAM_BOT_TOKEN=
@@ -156,6 +162,9 @@ TELEGRAM_CHAT_ID=
 
 Turn `SMTP_ENABLED` and `IMAP_ENABLED` on only after Proton Bridge is installed
 and tested on the VDS.
+
+`SEED_DEMO_DATA` must stay `false` in production. Set it to `true` only for a
+throwaway demo database.
 
 ### 3. Deployment Script
 
@@ -253,6 +262,16 @@ where you prefer managing services manually.
 The backup worker uses SQLite `VACUUM INTO`, gzips the snapshot, and copies the
 backup directory to `B2_REMOTE` when configured.
 
+Install and test the required CLI tools on the VDS:
+
+```bash
+which sqlite3
+which gzip
+which rclone
+sqlite3 --version
+rclone lsd b2:
+```
+
 Restore test:
 
 ```bash
@@ -261,6 +280,24 @@ DATABASE_PATH=/tmp/reachlog-restore.sqlite npm run worker:followup-check
 ```
 
 The restore test should open the database and exit cleanly.
+
+## Proton Bridge Mailboxes
+
+Before enabling IMAP sync, list the mailbox names exposed by Proton Bridge:
+
+```bash
+cd /home/forge/reachlog.example.com && npm run worker:list-mailboxes
+```
+
+Set the folders explicitly:
+
+```text
+IMAP_MAILBOXES=INBOX,Sent
+```
+
+The first sync uses `IMAP_LOOKBACK_DAYS=90` by default. This avoids importing
+years of old mailbox history on first production boot. Set it to `0` only if
+you intentionally want to scan all existing mail.
 
 ## Operational Checks
 

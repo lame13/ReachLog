@@ -56,8 +56,12 @@ cp .env.example .env.local
 Important flags:
 
 ```text
+TZ=Asia/Bangkok
+SEED_DEMO_DATA=false
 SMTP_ENABLED=false
 IMAP_ENABLED=false
+IMAP_MAILBOXES=INBOX,Sent
+IMAP_LOOKBACK_DAYS=90
 TELEGRAM_ENABLED=false
 ```
 
@@ -79,9 +83,9 @@ front as an extra gate.
 - `/targets` lists, searches, filters, and creates outreach targets with status, source, and dedupe keys.
 - `/targets/[id]` edits target/contact fields and shows timeline, thread, contact forms, notes, and follow-up state.
 - `/followups` is the manual follow-up queue with due/overdue/upcoming filters and completion actions.
-- `/import` is the CSV intake and dedupe preview surface.
+- `/import` is the CSV intake and dedupe preview surface. It supports the canonical outreach columns: `target`, `contact_type`, `contact_value`, `domain_key`, `dedupe_key`, `subject_or_form_context`, `message_text_or_summary`, `follow_up_date`, `next_action`, and `do_not_resend`.
 - `/analytics` summarizes funnel metrics, source performance, recent events, and event/source/status counts.
-- `/settings/modules` toggles module settings stored in SQLite.
+- `/settings/modules` shows runtime module state from environment flags.
 
 ## Exports
 
@@ -143,7 +147,7 @@ followup-check   every 15 minutes
 backup           daily
 ```
 
-`worker:mail-sync` connects to IMAP when `IMAP_ENABLED=true`. It imports unseen messages, links them to existing threads by `Message-ID`, `In-Reply-To`, and `References` first, falls back to known contact email plus normalized subject, and records unlinked messages as mailbox events.
+`worker:mail-sync` connects to IMAP when `IMAP_ENABLED=true`. It imports unseen messages, links them to existing threads by `Message-ID`, `In-Reply-To`, and `References` first, falls back to known contact email/domain plus normalized subject, sends Telegram notifications for inbound replies, and records unlinked messages as mailbox events.
 
 `worker:followup-check` finds due follow-ups and sends Telegram notifications when Telegram is enabled. It stamps notification fields so the same overdue task does not keep spamming.
 
@@ -164,6 +168,12 @@ SMTP_PORT=1025
 ```
 
 Exact ports depend on your Bridge configuration.
+
+List Bridge mailbox names before enabling sync:
+
+```bash
+npm run worker:list-mailboxes
+```
 
 ## Deployment Shape
 

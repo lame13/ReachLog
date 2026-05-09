@@ -1,6 +1,8 @@
 import "dotenv/config";
 import { z } from "zod";
 
+process.env.TZ ||= "Asia/Bangkok";
+
 const booleanFromString = z
   .string()
   .optional()
@@ -14,7 +16,9 @@ const portFromString = (fallback: number) =>
     .transform((value) => (value ? Number(value) : fallback));
 
 const EnvSchema = z.object({
+  TZ: z.string().default("Asia/Bangkok"),
   DATABASE_PATH: z.string().default(".data/app.sqlite"),
+  SEED_DEMO_DATA: booleanFromString,
 
   APP_BASIC_AUTH_ENABLED: booleanFromString,
   APP_BASIC_AUTH_USER: z.string().optional(),
@@ -32,6 +36,8 @@ const EnvSchema = z.object({
   IMAP_PORT: portFromString(1143),
   IMAP_USER: z.string().optional(),
   IMAP_PASS: z.string().optional(),
+  IMAP_MAILBOXES: z.string().default("INBOX,Sent"),
+  IMAP_LOOKBACK_DAYS: portFromString(90),
 
   TELEGRAM_ENABLED: booleanFromString,
   TELEGRAM_BOT_TOKEN: z.string().optional(),

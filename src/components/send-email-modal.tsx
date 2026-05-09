@@ -24,9 +24,11 @@ export function SendEmailModal({
     return null;
   }
 
-  const subject = target.subject?.startsWith("Re:")
-    ? target.subject
-    : `Re: ${target.subject ?? `Quick question about ${target.companyName}`}`;
+  const subject = target.subject
+    ? target.subject.startsWith("Re:")
+      ? target.subject
+      : `Re: ${target.subject}`
+    : `Quick question about ${target.companyName}`;
   const canSend = Boolean(target.contactEmail) && !target.doNotResend;
 
   return (

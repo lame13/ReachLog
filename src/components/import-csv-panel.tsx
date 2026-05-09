@@ -70,7 +70,7 @@ export function ImportCsvPanel() {
               className="min-h-56 w-full resize-y rounded-md border border-line px-3 py-2 font-mono text-xs outline-none focus:border-accent"
               name="csvText"
               defaultValue={previewState.csvText}
-              placeholder="email,company_name,website_url,source_type,source_url"
+              placeholder="target,contact_type,contact_value,domain_key,dedupe_key,subject_or_form_context,message_text_or_summary,follow_up_date,next_action,do_not_resend"
             />
           </label>
 
@@ -85,9 +85,9 @@ export function ImportCsvPanel() {
         </form>
 
         <div className="mt-5 rounded-md border border-line bg-panel p-3 text-sm text-muted">
-          <div>Expected headers: email, company_name, website_url, source_type.</div>
+          <div>Canonical headers: target, contact_type, contact_value, domain_key, dedupe_key.</div>
           <div className="mt-1">
-            Optional: source_url, form_url, subject, message_text, notes.
+            Optional: follow_up_date, next_action, do_not_resend, source_reference.
           </div>
         </div>
       </section>
@@ -140,6 +140,7 @@ export function ImportCsvPanel() {
                 <th className="px-4 py-3 font-medium">Company</th>
                 <th className="px-4 py-3 font-medium">Email</th>
                 <th className="px-4 py-3 font-medium">Domain</th>
+                <th className="px-4 py-3 font-medium">Follow-up</th>
                 <th className="px-4 py-3 font-medium">Dedupe</th>
                 <th className="px-4 py-3 font-medium">Result</th>
               </tr>
@@ -155,6 +156,9 @@ export function ImportCsvPanel() {
                     </td>
                     <td className="px-4 py-3 text-muted">{row.email || "none"}</td>
                     <td className="px-4 py-3">{row.domain || "unknown"}</td>
+                    <td className="px-4 py-3 text-muted">
+                      {row.followUpDate || "none"}
+                    </td>
                     <td className="px-4 py-3">
                       <div className="max-w-72 truncate font-mono text-xs text-muted">
                         {row.dedupeKey || "none"}
@@ -177,7 +181,7 @@ export function ImportCsvPanel() {
                 ))
               ) : (
                 <tr className="border-t border-line">
-                  <td className="px-4 py-10 text-center text-muted" colSpan={6}>
+                  <td className="px-4 py-10 text-center text-muted" colSpan={7}>
                     Upload or paste CSV to preview duplicates.
                   </td>
                 </tr>

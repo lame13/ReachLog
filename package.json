@@ -7,9 +7,11 @@
     "build": "next build",
     "start": "HOSTNAME=127.0.0.1 node .next/standalone/server.js",
     "lint": "next lint",
+    "typecheck": "tsc --noEmit --project tsconfig.typecheck.json",
     "db:studio": "drizzle-kit studio",
     "db:generate": "drizzle-kit generate",
     "worker:mail-sync": "tsx workers/mail-sync.ts",
+    "worker:list-mailboxes": "tsx workers/list-mailboxes.ts",
     "worker:followup-check": "tsx workers/followup-check.ts",
     "worker:backup": "tsx workers/backup.ts"
   },
@@ -26,6 +28,7 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tailwind-merge": "^2.6.0",
+    "tsx": "^4.19.2",
     "zod": "^3.24.1"
   },
   "devDependencies": {
@@ -41,7 +44,6 @@
     "eslint-config-next": "^15.1.4",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
-    "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }
 }
