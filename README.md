@@ -53,6 +53,8 @@ Copy the example file and edit the values you need:
 cp .env.example .env.local
 ```
 
+For Forge/VDS production values, start from `.env.production.example`.
+
 Important flags:
 
 ```text
@@ -91,7 +93,7 @@ npm run prod:check
 - `/targets` lists, searches, filters, and creates outreach targets with status, source, and dedupe keys.
 - `/targets/[id]` edits target/contact fields and shows timeline, thread, contact forms, notes, and follow-up state.
 - `/followups` is the manual follow-up queue with due/overdue/upcoming filters and completion actions.
-- `/import` is the CSV intake and dedupe preview surface. It supports the canonical outreach columns: `target`, `contact_type`, `contact_value`, `domain_key`, `dedupe_key`, `subject_or_form_context`, `message_text_or_summary`, `follow_up_date`, `next_action`, and `do_not_resend`.
+- `/import` is the CSV intake and dedupe preview surface. It supports the canonical outreach columns: `target`, `contact_type`, `contact_value`, `domain_key`, `dedupe_key`, `subject_or_form_context`, `message_text_or_summary`, `follow_up_date`, `next_action`, and `do_not_resend`. Imported `do_not_resend` is treated as dedupe protection unless the row status/action is explicitly dead, bounced, skipped, blocked, or do-not-send.
 - `/analytics` summarizes funnel metrics, source performance, recent events, and event/source/status counts.
 - `/settings/modules` shows runtime module state from environment flags.
 

@@ -40,11 +40,18 @@ async function checkFollowups() {
     )
     .all(now) as DueFollowup[];
 
+  if (!env.TELEGRAM_ENABLED) {
+    console.log(
+      `followup-check: ${dueFollowups.length} due, Telegram disabled; notifications not stamped`
+    );
+    return;
+  }
+
   for (const followup of dueFollowups) {
     const text = `Follow-up due: ${followup.company_name} (${followup.contact_email ?? "form only"})`;
     const result = await sendTelegramMessage(text);
 
-    if (result.sent || !env.TELEGRAM_ENABLED) {
+    if (result.sent) {
       sqlite
         .prepare(
           `

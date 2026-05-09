@@ -3,6 +3,7 @@ import { Save, Send, X } from "lucide-react";
 import { saveDraftAction, sendNowAction } from "@/modules/smtp/actions";
 import { formatDateTime } from "@/modules/core/dates";
 import { createId } from "@/modules/core/ids";
+import { isSendBlockedStatus } from "@/modules/outreach/status";
 
 type SendTarget = {
   id: string;
@@ -10,6 +11,7 @@ type SendTarget = {
   doNotResend: boolean;
   contactEmail: string | null;
   contactName: string | null;
+  status: string;
   lastOutboundAt: string | null;
   subject: string | null;
 };
@@ -30,7 +32,8 @@ export function SendEmailModal({
       ? target.subject
       : `Re: ${target.subject}`
     : `Quick question about ${target.companyName}`;
-  const canSend = Boolean(target.contactEmail) && !target.doNotResend;
+  const blockedStatus = isSendBlockedStatus(target.status);
+  const canSend = Boolean(target.contactEmail) && !target.doNotResend && !blockedStatus;
   const sendKey = createId("sendkey");
 
   return (
@@ -81,6 +84,7 @@ export function SendEmailModal({
 
           <div className="rounded-md border border-line bg-panel p-3 text-sm text-muted">
             <div>Last outbound: {formatDateTime(target.lastOutboundAt)}</div>
+            <div>Status: {target.status}</div>
             <div>Do not resend: {target.doNotResend ? "on" : "off"}</div>
           </div>
 

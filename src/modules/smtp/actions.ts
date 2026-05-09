@@ -6,6 +6,7 @@ import { env } from "@/modules/core/env";
 import { getSqlite } from "@/modules/core/db/client";
 import { createId } from "@/modules/core/ids";
 import { normalizeSubject } from "@/modules/mailbox/threading";
+import { isSendBlockedStatus } from "@/modules/outreach/status";
 
 export async function saveDraftAction(formData: FormData) {
   const targetId = String(formData.get("targetId") ?? "");
@@ -35,9 +36,16 @@ export async function sendNowAction(formData: FormData) {
 
   const target = getSendableTarget(targetId);
 
-  if (!target?.contactEmail || target.doNotResend) {
+  const blockedStatus = isSendBlockedStatus(target?.status);
+
+  if (!target?.contactEmail || target.doNotResend || blockedStatus) {
     createTargetEvent(targetId, "send_blocked", {
-      reason: target?.doNotResend ? "do_not_resend" : "missing_contact_email",
+      reason: target?.doNotResend
+        ? "do_not_resend"
+        : blockedStatus
+          ? "blocked_status"
+          : "missing_contact_email",
+      status: target?.status,
       subject
     });
     revalidateAfterSend(targetId);
@@ -137,6 +145,7 @@ type SendableTarget = {
   contactId: string | null;
   contactEmail: string | null;
   companyName: string;
+  status: string;
   doNotResend: number;
   threadId: string | null;
   threadSubject: string | null;
@@ -151,6 +160,7 @@ function getSendableTarget(targetId: string) {
         targets.id,
         targets.contact_id as contactId,
         targets.company_name as companyName,
+        targets.status,
         targets.do_not_resend as doNotResend,
         contacts.email as contactEmail,
         threads.id as threadId,

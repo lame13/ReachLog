@@ -490,6 +490,7 @@ export function getSendTarget(targetId: string | undefined) {
         id: targets.id,
         companyName: targets.companyName,
         doNotResend: targets.doNotResend,
+        status: targets.status,
         contactEmail: contacts.email,
         contactName: contacts.name,
         lastOutboundAt: threads.lastOutboundAt,

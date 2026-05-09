@@ -168,6 +168,9 @@ and tested on the VDS.
 `SEED_DEMO_DATA` must stay `false` in production. Set it to `true` only for a
 throwaway demo database.
 
+The repository also includes `.env.production.example` with the same
+absolute-path defaults.
+
 ### 3. Deployment Script
 
 Run this one-time setup over SSH first:

@@ -10,6 +10,7 @@ import {
   normalizeDomain,
   sourceDedupeKey
 } from "@/modules/outreach/dedupe";
+import { isSendBlockedStatus } from "@/modules/outreach/status";
 
 export type ImportPreviewResult =
   | "new target"
@@ -37,6 +38,7 @@ export type ImportPreviewRow = {
   nextAction: string;
   followUpDate: string;
   doNotResend: boolean;
+  dedupeOnlyDoNotResend: boolean;
   result: ImportPreviewResult;
   reason: string;
 };
@@ -176,6 +178,17 @@ function buildPreviewRows(csvText: string) {
 }
 
 function assertSupportedImportHeaders(headers: string[]) {
+  const isPlatformStatusCsv =
+    headers.includes("date_recorded") &&
+    headers.includes("platform") &&
+    headers.includes("action_completed");
+
+  if (isPlatformStatusCsv) {
+    throw new Error(
+      "This looks like a platform status tracker CSV. Do not import it through target import yet."
+    );
+  }
+
   const unsupportedTrackerImports = [
     {
       name: "marketplace bids",
@@ -223,17 +236,17 @@ function normalizeImportRow(
 
   const contactType = value("contact_type").toLowerCase();
   const contactValue = value("contact_value");
+  const isEmailContact =
+    contactType === "email" ||
+    (contactType.includes("email") && contactValue.includes("@"));
+  const isFormContact = contactType.includes("form");
+  const isThreadContact = contactType.includes("thread");
+  const contactValueUrl = looksLikeUrl(contactValue) ? contactValue : "";
   const email = (
     value("email", "contact_email") ||
-    (contactType === "email" ? contactValue : "")
+    (isEmailContact && contactValue.includes("@") ? contactValue : "")
   ).toLowerCase();
-  const websiteUrl =
-    value("website_url", "website", "url") ||
-    (contactType === "website" && looksLikeUrl(contactValue) ? contactValue : "");
-  const sourceType =
-    value("source_type", "source", "source_group", "channel") ||
-    (contactType === "form" || contactType === "contact_form" ? "contact_form" : "csv");
-  const sourceUrl = value(
+  const explicitSourceUrl = value(
     "source_url",
     "source_link",
     "thread_url",
@@ -243,8 +256,15 @@ function normalizeImportRow(
   );
   const formUrl =
     value("form_url", "contact_form_url") ||
-    (sourceType === "contact_form" && looksLikeUrl(contactValue) ? contactValue : "") ||
-    sourceUrl;
+    (isFormContact ? contactValueUrl || explicitSourceUrl : "");
+  const sourceUrl =
+    explicitSourceUrl || (!isEmailContact ? contactValueUrl : "") || formUrl;
+  const websiteUrl =
+    value("website_url", "website", "url") ||
+    (!isFormContact && !isThreadContact && contactValueUrl ? contactValueUrl : "");
+  const sourceType = isFormContact
+    ? "contact_form"
+    : value("source_type", "source", "source_group", "channel") || "csv";
   const name = value("name", "contact_name");
   const subject = value("subject", "subject_or_form_context");
   const messageText = value(
@@ -262,8 +282,16 @@ function normalizeImportRow(
     (domain ? domain.split(".")[0] : email || "Unknown target");
   const followUpDate = value("follow_up_date", "followup_date", "next_follow_up");
   const nextAction = value("next_action");
-  const doNotResend = parseBoolean(value("do_not_resend", "do_not_contact"));
-  const status = value("status") || inferStatus({ followUpDate, nextAction, doNotResend, sourceType });
+  const rawDoNotResend = parseBoolean(value("do_not_resend", "do_not_contact"));
+  const status =
+    value("status") ||
+    inferStatus({ followUpDate, nextAction, dedupeProtected: rawDoNotResend, sourceType });
+  const doNotResend = shouldImportHardSendBlock({
+    rawDoNotResend,
+    status,
+    nextAction
+  });
+  const dedupeOnlyDoNotResend = rawDoNotResend && !doNotResend;
   const dedupeKey = value("dedupe_key") || inferDedupeKey({
     email,
     domain,
@@ -271,6 +299,31 @@ function normalizeImportRow(
     sourceUrl,
     formUrl
   });
+
+  if (companyName === "Unknown target" && !email && !websiteUrl && !sourceUrl) {
+    return {
+      rowNumber,
+      companyName,
+      name,
+      email,
+      domain,
+      websiteUrl,
+      sourceType,
+      sourceUrl,
+      formUrl,
+      subject,
+      messageText,
+      notes,
+      dedupeKey,
+      status,
+      nextAction,
+      followUpDate,
+      doNotResend,
+      dedupeOnlyDoNotResend,
+      result: "invalid",
+      reason: "No target, email, website, source URL, or form URL to import."
+    };
+  }
 
   if (!dedupeKey) {
     return {
@@ -291,6 +344,7 @@ function normalizeImportRow(
       nextAction,
       followUpDate,
       doNotResend,
+      dedupeOnlyDoNotResend,
       result: "invalid",
       reason: "No email, website, source URL, or form URL to dedupe."
     };
@@ -315,6 +369,7 @@ function normalizeImportRow(
       nextAction,
       followUpDate,
       doNotResend,
+      dedupeOnlyDoNotResend,
       result: "duplicate in file",
       reason: "Another row in this CSV has the same dedupe key."
     };
@@ -342,8 +397,11 @@ function normalizeImportRow(
     nextAction,
     followUpDate,
     doNotResend,
+    dedupeOnlyDoNotResend,
     result: dedupe.result,
-    reason: dedupe.reason
+    reason: dedupeOnlyDoNotResend
+      ? `${dedupe.reason} CSV do_not_resend is kept as dedupe-only protection.`
+      : dedupe.reason
   };
 }
 
@@ -466,7 +524,7 @@ function insertImportRows(rows: ImportPreviewRow[]) {
 
       createTargetEvent(targetId, "target_created", row, now);
 
-      if (row.sourceType === "contact_form" && row.formUrl && row.messageText) {
+      if (row.sourceType === "contact_form" && row.formUrl) {
         const submittedAt = now;
 
         sqlite
@@ -486,7 +544,7 @@ function insertImportRows(rows: ImportPreviewRow[]) {
             row.websiteUrl || `https://${row.domain}`,
             row.formUrl,
             row.subject || null,
-            row.messageText,
+            row.messageText || row.notes || row.nextAction || "Imported contact form outreach.",
             submittedAt,
             safeContactFormDedupeKey(row.formUrl),
             row.notes || null,
@@ -498,7 +556,7 @@ function insertImportRows(rows: ImportPreviewRow[]) {
 
       const dueAt = parseFollowUpDate(row.followUpDate);
 
-      if (dueAt && !row.doNotResend) {
+      if (dueAt && !row.doNotResend && !isSendBlockedStatus(row.status)) {
         sqlite
           .prepare(
             `
@@ -588,7 +646,8 @@ function createTargetEvent(
         dedupeKey: row.dedupeKey,
         nextAction: row.nextAction || null,
         followUpDate: row.followUpDate || null,
-        doNotResend: row.doNotResend
+        doNotResend: row.doNotResend,
+        dedupeOnlyDoNotResend: row.dedupeOnlyDoNotResend
       }),
       now
     );
@@ -738,20 +797,20 @@ function parseBoolean(value: string) {
 function inferStatus({
   followUpDate,
   nextAction,
-  doNotResend,
+  dedupeProtected,
   sourceType
 }: {
   followUpDate: string;
   nextAction: string;
-  doNotResend: boolean;
+  dedupeProtected: boolean;
   sourceType: string;
 }) {
-  if (doNotResend) {
-    return "dead";
-  }
-
   if (followUpDate || nextAction.toLowerCase().includes("follow")) {
     return "follow-up due";
+  }
+
+  if (dedupeProtected) {
+    return "dedupe protected";
   }
 
   if (sourceType === "contact_form") {
@@ -759,6 +818,32 @@ function inferStatus({
   }
 
   return "new";
+}
+
+function shouldImportHardSendBlock({
+  rawDoNotResend,
+  status,
+  nextAction
+}: {
+  rawDoNotResend: boolean;
+  status: string;
+  nextAction: string;
+}) {
+  if (!rawDoNotResend) {
+    return false;
+  }
+
+  return isSendBlockedStatus(status) || hasExplicitHardBlockAction(nextAction);
+}
+
+function hasExplicitHardBlockAction(nextAction: string) {
+  const normalized = nextAction.toLowerCase();
+
+  return (
+    normalized.includes("do not send") ||
+    normalized.includes("never send") ||
+    normalized.includes("dead")
+  );
 }
 
 function parseFollowUpDate(value: string) {
