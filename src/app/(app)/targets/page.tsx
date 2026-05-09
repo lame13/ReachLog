@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AlertTriangle, Plus, Search, Send } from "lucide-react";
+import { ExportLinks } from "@/components/export-links";
 import { SendEmailModal } from "@/components/send-email-modal";
 import { StatusPill } from "@/components/status-pill";
 import { formatDateTime } from "@/modules/core/dates";
@@ -34,6 +35,13 @@ export default async function TargetsPage({ searchParams }: PageProps) {
   const filterOptions = getTargetFilterOptions();
   const sendTarget = getSendTarget(params?.sendTargetId);
   const showCreate = params?.showCreate === "1";
+  const exportParams = {
+    q: params?.q,
+    status: params?.status,
+    source: params?.source,
+    domain: params?.domain,
+    flag: params?.flag
+  };
 
   return (
     <>
@@ -44,13 +52,17 @@ export default async function TargetsPage({ searchParams }: PageProps) {
             Outreach records with email, source, status, and dedupe protection.
           </p>
         </div>
-        <Link
-          className="inline-flex h-10 items-center gap-2 rounded-md bg-ink px-3 text-sm font-medium text-white"
-          href={showCreate ? "/targets" : "/targets?showCreate=1"}
-        >
-          <Plus className="size-4" aria-hidden="true" />
-          {showCreate ? "Close form" : "New target"}
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <ExportLinks entity="targets" label="Targets" params={exportParams} />
+          <ExportLinks entity="messages" label="Mail" />
+          <Link
+            className="inline-flex h-10 items-center gap-2 rounded-md bg-ink px-3 text-sm font-medium text-white"
+            href={showCreate ? "/targets" : "/targets?showCreate=1"}
+          >
+            <Plus className="size-4" aria-hidden="true" />
+            {showCreate ? "Close form" : "New target"}
+          </Link>
+        </div>
       </div>
 
       {showCreate && <CreateTargetPanel />}

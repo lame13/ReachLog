@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Send } from "lucide-react";
+import { ExportLinks } from "@/components/export-links";
 import { SendEmailModal } from "@/components/send-email-modal";
 import { StatusPill } from "@/components/status-pill";
 import { formatDateTime, timeAgo } from "@/modules/core/dates";
@@ -31,11 +32,18 @@ export default async function FollowupsPage({ searchParams }: PageProps) {
 
   return (
     <>
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold">Follow-ups</h1>
-        <p className="mt-1 text-sm text-muted">
-          Manual queue for due, overdue, upcoming, and snoozed outreach.
-        </p>
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">Follow-ups</h1>
+          <p className="mt-1 text-sm text-muted">
+            Manual queue for due, overdue, upcoming, and snoozed outreach.
+          </p>
+        </div>
+        <ExportLinks
+          entity="followups"
+          label="Follow-ups"
+          params={{ filter: activeFilter }}
+        />
       </div>
 
       <div className="mb-4 flex flex-wrap gap-2">

@@ -83,6 +83,21 @@ front as an extra gate.
 - `/analytics` summarizes funnel metrics, source performance, recent events, and event/source/status counts.
 - `/settings/modules` toggles module settings stored in SQLite.
 
+## Exports
+
+Export URLs support `format=csv` or `format=json`:
+
+- `/api/export/targets`
+- `/api/export/messages`
+- `/api/export/followups`
+- `/api/export/events`
+- `/api/export/contact-forms`
+- `/api/export/outbound-sends`
+
+The targets export accepts the same filters as `/targets`: `q`, `status`,
+`source`, `domain`, and `flag`. Follow-up export accepts `filter=due`,
+`overdue`, `upcoming`, or `all`.
+
 ## Database
 
 The core tables are:

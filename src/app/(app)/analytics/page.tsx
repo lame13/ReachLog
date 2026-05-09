@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Clock3, MailCheck, Send, Target } from "lucide-react";
+import { ExportLinks } from "@/components/export-links";
 import { MetricCard } from "@/components/metric-card";
 import { formatDateTime } from "@/modules/core/dates";
 import { getAnalyticsData } from "@/modules/outreach/queries";
@@ -11,11 +12,19 @@ export default function AnalyticsPage() {
 
   return (
     <>
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold">Analytics</h1>
-        <p className="mt-1 text-sm text-muted">
-          Event, status, and source counts from the outreach timeline.
-        </p>
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">Analytics</h1>
+          <p className="mt-1 text-sm text-muted">
+            Event, status, and source counts from the outreach timeline.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <ExportLinks entity="events" label="Events" />
+          <ExportLinks entity="messages" label="Mail" />
+          <ExportLinks entity="contact-forms" label="Forms" />
+          <ExportLinks entity="outbound-sends" label="Sends" />
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

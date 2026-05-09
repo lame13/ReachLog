@@ -274,3 +274,20 @@ journalctl -u reachlog-backup.service -n 100
 
 The app records failed SMTP sends in `outbound_sends` and shows them on the
 dashboard. Worker failures send Telegram notifications when Telegram is enabled.
+
+## Data Exports
+
+The app exposes CSV and JSON downloads behind the same Basic Auth gate:
+
+```text
+/api/export/targets?format=csv
+/api/export/targets?format=json
+/api/export/messages?format=csv
+/api/export/followups?format=csv
+/api/export/events?format=csv
+/api/export/contact-forms?format=csv
+/api/export/outbound-sends?format=csv
+```
+
+Targets support `q`, `status`, `source`, `domain`, and `flag`. Messages support
+`targetId` and `direction`. Follow-ups support `filter=due|overdue|upcoming|all`.
