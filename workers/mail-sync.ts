@@ -520,36 +520,29 @@ async function insertMessage({
         now
       );
 
+    const state = updateThreadAfterMessage({
+      threadId: thread.threadId,
+      direction,
+      messageDate,
+      messageId
+    });
+
     sqlite
       .prepare(
         `
-        UPDATE threads
-        SET last_message_id = ?,
-            last_inbound_at = CASE WHEN ? = 'inbound' THEN ? ELSE last_inbound_at END,
-            last_outbound_at = CASE WHEN ? = 'outbound' THEN ? ELSE last_outbound_at END,
-            next_followup_at = CASE WHEN ? = 'inbound' THEN NULL ELSE next_followup_at END,
-            status = ?,
+        UPDATE targets
+        SET status = CASE
+              WHEN ? = 1 THEN 'replied'
+              WHEN lower(status) IN ('new', 'dedupe protected', 'follow-up due', 'queued') THEN 'sent'
+              ELSE status
+            END,
             updated_at = ?
         WHERE id = ?
       `
       )
-      .run(
-        messageId,
-        direction,
-        messageDate,
-        direction,
-        messageDate,
-        direction,
-        direction === "inbound" ? "replied" : "waiting",
-        now,
-        thread.threadId
-      );
+      .run(state.latestIsInbound ? 1 : 0, now, thread.targetId);
 
-    sqlite
-      .prepare("UPDATE targets SET status = ?, updated_at = ? WHERE id = ?")
-      .run(direction === "inbound" ? "replied" : "sent", now, thread.targetId);
-
-    if (direction === "inbound") {
+    if (state.latestIsInbound) {
       sqlite
         .prepare(
           `
@@ -583,13 +576,108 @@ async function insertMessage({
         }),
         now
       );
+
+    return state;
   });
 
-  transaction();
+  const state = transaction();
 
-  if (direction === "inbound") {
+  if (direction === "inbound" && state.latestIsInbound) {
     await sendTelegramMessage(`Reply received: ${fromEmail}\n${subject}`);
   }
+}
+
+function updateThreadAfterMessage({
+  threadId,
+  direction,
+  messageDate,
+  messageId
+}: {
+  threadId: string;
+  direction: "inbound" | "outbound";
+  messageDate: string;
+  messageId: string;
+}) {
+  const sqlite = getSqlite();
+  const now = new Date().toISOString();
+
+  if (direction === "inbound") {
+    sqlite
+      .prepare(
+        `
+        UPDATE threads
+        SET last_inbound_at = CASE
+              WHEN last_inbound_at IS NULL OR ? > last_inbound_at THEN ?
+              ELSE last_inbound_at
+            END,
+            updated_at = ?
+        WHERE id = ?
+      `
+      )
+      .run(messageDate, messageDate, now, threadId);
+  } else {
+    sqlite
+      .prepare(
+        `
+        UPDATE threads
+        SET last_outbound_at = CASE
+              WHEN last_outbound_at IS NULL OR ? > last_outbound_at THEN ?
+              ELSE last_outbound_at
+            END,
+            updated_at = ?
+        WHERE id = ?
+      `
+      )
+      .run(messageDate, messageDate, now, threadId);
+  }
+
+  const state = sqlite
+    .prepare(
+      `
+      SELECT
+        threads.last_inbound_at as lastInboundAt,
+        threads.last_outbound_at as lastOutboundAt,
+        (
+          SELECT messages.message_id
+          FROM messages
+          WHERE messages.thread_id = threads.id
+          ORDER BY COALESCE(messages.sent_at, messages.received_at, messages.created_at) DESC
+          LIMIT 1
+        ) as latestMessageId
+      FROM threads
+      WHERE threads.id = ?
+    `
+    )
+    .get(threadId) as {
+    lastInboundAt: string | null;
+    lastOutboundAt: string | null;
+    latestMessageId: string | null;
+  };
+
+  const latestIsInbound =
+    state.lastInboundAt !== null &&
+    (!state.lastOutboundAt || state.lastInboundAt > state.lastOutboundAt);
+
+  sqlite
+    .prepare(
+      `
+      UPDATE threads
+      SET last_message_id = ?,
+          status = ?,
+          next_followup_at = CASE WHEN ? = 1 THEN NULL ELSE next_followup_at END,
+          updated_at = ?
+      WHERE id = ?
+    `
+    )
+    .run(
+      state.latestMessageId ?? messageId,
+      latestIsInbound ? "replied" : "waiting",
+      latestIsInbound ? 1 : 0,
+      now,
+      threadId
+    );
+
+  return { latestIsInbound };
 }
 
 function createUnlinkedMailEvent({

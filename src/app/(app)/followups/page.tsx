@@ -10,6 +10,7 @@ import {
   snoozeFollowupAction
 } from "@/modules/followups/actions";
 import { getFollowups, getSendTarget } from "@/modules/outreach/queries";
+import { isSendBlockedStatus } from "@/modules/outreach/status";
 
 type PageProps = {
   searchParams?: Promise<{
@@ -77,7 +78,13 @@ export default async function FollowupsPage({ searchParams }: PageProps) {
             </thead>
             <tbody>
               {followups.length ? (
-                followups.map((followup) => (
+                followups.map((followup) => {
+                  const canSend =
+                    Boolean(followup.contactEmail) &&
+                    !followup.doNotResend &&
+                    !isSendBlockedStatus(followup.targetStatus);
+
+                  return (
                   <tr key={followup.id} className="border-t border-line align-top">
                     <td className="px-4 py-3">
                       <Link className="font-medium" href={`/targets/${followup.targetId}`}>
@@ -100,13 +107,20 @@ export default async function FollowupsPage({ searchParams }: PageProps) {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-2">
-                        <Link
-                          className="inline-flex h-9 items-center gap-2 rounded-md bg-ink px-3 text-xs font-medium text-white"
-                          href={`/followups?filter=${activeFilter}&sendTargetId=${followup.targetId}`}
-                        >
-                          <Send className="size-3.5" aria-hidden="true" />
-                          Send
-                        </Link>
+                        {canSend ? (
+                          <Link
+                            className="inline-flex h-9 items-center gap-2 rounded-md bg-ink px-3 text-xs font-medium text-white"
+                            href={`/followups?filter=${activeFilter}&sendTargetId=${followup.targetId}`}
+                          >
+                            <Send className="size-3.5" aria-hidden="true" />
+                            Send
+                          </Link>
+                        ) : (
+                          <span className="inline-flex h-9 items-center gap-2 rounded-md bg-gray-200 px-3 text-xs font-medium text-muted">
+                            <Send className="size-3.5" aria-hidden="true" />
+                            Send
+                          </span>
+                        )}
                         <form action={completeFollowupAction}>
                           <input name="followupId" type="hidden" value={followup.id} />
                           <input name="targetId" type="hidden" value={followup.targetId} />
@@ -132,7 +146,8 @@ export default async function FollowupsPage({ searchParams }: PageProps) {
                       </div>
                     </td>
                   </tr>
-                ))
+                  );
+                })
               ) : (
                 <tr className="border-t border-line">
                   <td className="px-4 py-10 text-center text-muted" colSpan={6}>

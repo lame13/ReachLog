@@ -12,6 +12,7 @@ import { StatusPill } from "@/components/status-pill";
 import { formatDateTime, timeAgo } from "@/modules/core/dates";
 import { getDashboardData, getSendTarget } from "@/modules/outreach/queries";
 import { markDeadAction, snoozeFollowupAction } from "@/modules/followups/actions";
+import { isSendBlockedStatus } from "@/modules/outreach/status";
 
 type PageProps = {
   searchParams?: Promise<{
@@ -61,7 +62,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
         />
         <MetricCard
           icon={AlertTriangle}
-          label="Failed sends"
+          label="Send anomalies"
           tone="rose"
           value={data.stats.failedSends}
         />
@@ -70,7 +71,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       {data.failedSends.length > 0 && (
         <section className="mt-6 rounded-lg border border-rose-200 bg-white shadow-sm">
           <div className="border-b border-rose-100 px-4 py-3">
-            <h2 className="font-semibold text-rose-800">Failed Sends</h2>
+            <h2 className="font-semibold text-rose-800">Send Anomalies</h2>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-[820px] text-sm">
@@ -79,6 +80,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
                   <th className="px-4 py-3 font-medium">Company</th>
                   <th className="px-4 py-3 font-medium">To</th>
                   <th className="px-4 py-3 font-medium">Subject</th>
+                  <th className="px-4 py-3 font-medium">Status</th>
                   <th className="px-4 py-3 font-medium">Error</th>
                   <th className="px-4 py-3 font-medium">Updated</th>
                 </tr>
@@ -93,6 +95,9 @@ export default async function DashboardPage({ searchParams }: PageProps) {
                     </td>
                     <td className="px-4 py-3 text-muted">{send.toEmail}</td>
                     <td className="px-4 py-3">{send.subject}</td>
+                    <td className="px-4 py-3">
+                      <StatusPill status={send.status} />
+                    </td>
                     <td className="px-4 py-3 text-rose-700">
                       {send.lastError ?? "unknown"}
                     </td>
@@ -164,7 +169,13 @@ export default async function DashboardPage({ searchParams }: PageProps) {
               </tr>
             </thead>
             <tbody>
-              {data.followups.map((followup) => (
+              {data.followups.map((followup) => {
+                const canSend =
+                  Boolean(followup.contactEmail) &&
+                  !followup.doNotResend &&
+                  !isSendBlockedStatus(followup.targetStatus);
+
+                return (
                 <tr key={followup.id} className="border-t border-line">
                   <td className="px-4 py-3 font-medium">
                     <Link href={`/targets/${followup.targetId}`}>
@@ -179,12 +190,18 @@ export default async function DashboardPage({ searchParams }: PageProps) {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-2">
-                      <Link
-                        className="inline-flex h-9 items-center rounded-md bg-ink px-3 text-xs font-medium text-white"
-                        href={`/dashboard?sendTargetId=${followup.targetId}`}
-                      >
-                        Send
-                      </Link>
+                      {canSend ? (
+                        <Link
+                          className="inline-flex h-9 items-center rounded-md bg-ink px-3 text-xs font-medium text-white"
+                          href={`/dashboard?sendTargetId=${followup.targetId}`}
+                        >
+                          Send
+                        </Link>
+                      ) : (
+                        <span className="inline-flex h-9 items-center rounded-md bg-gray-200 px-3 text-xs font-medium text-muted">
+                          Send
+                        </span>
+                      )}
                       <form action={snoozeFollowupAction}>
                         <input name="followupId" type="hidden" value={followup.id} />
                         <input name="targetId" type="hidden" value={followup.targetId} />
@@ -203,7 +220,8 @@ export default async function DashboardPage({ searchParams }: PageProps) {
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

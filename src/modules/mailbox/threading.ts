@@ -2,7 +2,7 @@ export function normalizeSubject(subject: string) {
   return subject
     .trim()
     .toLowerCase()
-    .replace(/^(re|fw|fwd):\s*/i, "")
+    .replace(/^(?:(?:re|fw|fwd):\s*)+/i, "")
     .replace(/\s+/g, " ");
 }
 

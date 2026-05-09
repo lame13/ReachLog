@@ -91,12 +91,14 @@ export function getDashboardData() {
     .from(messages)
     .innerJoin(threads, eq(messages.threadId, threads.id))
     .innerJoin(targets, eq(threads.targetId, targets.id))
-    .orderBy(desc(messages.createdAt))
+    .orderBy(sql`COALESCE(${messages.sentAt}, ${messages.receivedAt}, ${messages.createdAt}) DESC`)
     .limit(6)
     .all();
 
   const [failedSendCount] = sqlite
-    .prepare("SELECT COUNT(*) as count FROM outbound_sends WHERE status = 'failed'")
+    .prepare(
+      "SELECT COUNT(*) as count FROM outbound_sends WHERE status IN ('failed', 'smtp_accepted_persist_failed')"
+    )
     .all() as Array<{ count: number }>;
 
   const failedSends = sqlite
@@ -107,12 +109,13 @@ export function getDashboardData() {
         outbound_sends.target_id as targetId,
         outbound_sends.to_email as toEmail,
         outbound_sends.subject,
+        outbound_sends.status,
         outbound_sends.last_error as lastError,
         outbound_sends.updated_at as updatedAt,
         targets.company_name as companyName
       FROM outbound_sends
       INNER JOIN targets ON targets.id = outbound_sends.target_id
-      WHERE outbound_sends.status = 'failed'
+      WHERE outbound_sends.status IN ('failed', 'smtp_accepted_persist_failed')
       ORDER BY outbound_sends.updated_at DESC
       LIMIT 5
     `
@@ -122,6 +125,7 @@ export function getDashboardData() {
     targetId: string;
     toEmail: string;
     subject: string;
+    status: string;
     lastError: string | null;
     updatedAt: string;
     companyName: string;
@@ -270,7 +274,7 @@ export function getTargetDetail(id: string) {
         .select()
         .from(messages)
         .where(inArray(messages.threadId, threadIds))
-        .orderBy(messages.createdAt)
+        .orderBy(sql`COALESCE(${messages.sentAt}, ${messages.receivedAt}, ${messages.createdAt})`)
         .all()
     : [];
 
@@ -326,6 +330,7 @@ export function getFollowups(filter: "due" | "overdue" | "upcoming" | "all" = "a
       notificationSentAt: followupTasks.notificationSentAt,
       notificationChannel: followupTasks.notificationChannel,
       targetStatus: targets.status,
+      doNotResend: targets.doNotResend,
       lastOutboundAt: threads.lastOutboundAt,
       lastInboundAt: threads.lastInboundAt
     })

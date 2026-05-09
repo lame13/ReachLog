@@ -240,7 +240,7 @@ function normalizeImportRow(
   const isEmailContact =
     contactType === "email" ||
     (contactType.includes("email") && contactValue.includes("@"));
-  const isFormContact = contactType.includes("form");
+  const isFormContact = isContactFormType(contactType);
   const isThreadContact = contactType.includes("thread");
   const contactValueUrl = looksLikeUrl(contactValue) ? contactValue : "";
   const email = (
@@ -808,6 +808,18 @@ function safeContactFormDedupeKey(formUrl: string) {
 
 function parseBoolean(value: string) {
   return ["1", "true", "yes", "y", "on"].includes(value.trim().toLowerCase());
+}
+
+function isContactFormType(contactType: string) {
+  const normalized = contactType.toLowerCase().trim();
+
+  return (
+    normalized === "form" ||
+    normalized === "contact_form" ||
+    normalized === "url/form" ||
+    normalized === "url_form" ||
+    normalized.endsWith("/form")
+  );
 }
 
 function firstNonEmpty(...values: string[]) {
