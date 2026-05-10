@@ -4,24 +4,12 @@ import { useActionState } from "react";
 import { AlertTriangle, CheckCircle2, DatabaseZap, Upload } from "lucide-react";
 import {
   commitCsvImportAction,
-  previewCsvImportAction,
-  type ImportActionState,
-  type ImportPreviewResult
+  previewCsvImportAction
 } from "@/modules/outreach/import-actions";
-
-const emptyImportState: ImportActionState = {
-  csvText: "",
-  rows: [],
-  summary: {
-    total: 0,
-    importable: 0,
-    skipped: 0,
-    warnings: 0,
-    inserted: 0
-  },
-  message: null,
-  error: null
-};
+import {
+  initialImportState,
+  type ImportPreviewResult
+} from "@/modules/outreach/import-state";
 
 const resultStyles: Record<ImportPreviewResult, string> = {
   "new target": "border-emerald-200 bg-emerald-50 text-emerald-800",
@@ -35,11 +23,11 @@ const resultStyles: Record<ImportPreviewResult, string> = {
 export function ImportCsvPanel() {
   const [previewState, previewAction, previewPending] = useActionState(
     previewCsvImportAction,
-    emptyImportState
+    initialImportState
   );
   const [commitState, commitAction, commitPending] = useActionState(
     commitCsvImportAction,
-    emptyImportState
+    initialImportState
   );
   const activeState = commitState.message || commitState.error ? commitState : previewState;
   const canImport = previewState.summary.importable > 0;

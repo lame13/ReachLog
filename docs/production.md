@@ -218,6 +218,28 @@ binds to `127.0.0.1:3007` when Nginx proxies to it. The package `start` script
 pins the hostname to `127.0.0.1`, so the Node server is not exposed directly on
 the VDS public interface.
 
+If PM2 logs show this warning:
+
+```text
+"next start" does not work with "output: standalone" configuration.
+```
+
+the Forge process is still running the wrong command. Change the daemon/start
+command to either:
+
+```bash
+npm run start
+```
+
+or the direct standalone command:
+
+```bash
+HOSTNAME=127.0.0.1 node .next/standalone/server.js
+```
+
+Then restart the Forge daemon/PM2 process. Do not use `next start` for this
+project.
+
 ### 5. Forge Nginx Proxy
 
 In the Forge Nginx config for the site, replace the PHP/Laravel location block
