@@ -181,9 +181,14 @@ absolute-path defaults.
 Run this one-time setup over SSH first:
 
 ```bash
+APP_USER=reach-log
 sudo mkdir -p /data/outreach-crm/backups
-sudo chown -R forge:forge /data/outreach-crm
+sudo chown -R "$APP_USER:$APP_USER" /data/outreach-crm
 ```
+
+Use the actual Forge site user here. If the Node process runs as an isolated
+site user such as `reach-log`, the SQLite data directory must be writable by
+that same user. Do not leave it owned by `forge` or `root`.
 
 Use this as the Forge deployment script:
 
