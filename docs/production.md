@@ -203,6 +203,19 @@ echo "ReachLog deployed."
 Do not start the app in the deployment script. Forge should keep it running as
 a daemon.
 
+If you imported a canonical CSV where the historical date is embedded in the
+summary text as `date=YYYY-MM-DD`, deploy the timestamp parser fix and run this
+one-time backfill:
+
+```bash
+cd /home/forge/reachlog.example.com
+npm run worker:backup
+npm run prod:backfill-source-timestamps
+```
+
+Export events/contact forms again afterward and confirm historical rows no
+longer all show the import timestamp.
+
 ### 4. Forge Daemon
 
 Create a Forge daemon:

@@ -17,6 +17,10 @@ import {
   type ImportActionState,
   type ImportPreviewRow
 } from "@/modules/outreach/import-state";
+import {
+  parseFollowUpDate,
+  parseSourceTimestampFromValues
+} from "@/modules/outreach/historical-timestamps";
 
 export async function previewCsvImportAction(
   _previousState: ImportActionState,
@@ -228,14 +232,16 @@ function normalizeImportRow(
     value("company_name", "company", "account", "target") ||
     (domain ? domain.split(".")[0] : email || "Unknown target");
   const followUpDate = value("follow_up_date", "followup_date", "next_follow_up");
-  const sourceTimestamp = parseSourceTimestamp(
-    firstNonEmpty(
+  const sourceTimestamp =
+    parseSourceTimestampFromValues(
       value("date_sent"),
       value("date_posted"),
       value("date_updated"),
-      value("date_recorded")
-    )
-  ) ?? "";
+      value("date_recorded"),
+      messageText,
+      notes,
+      subject
+    ) ?? "";
   const nextAction = value("next_action");
   const rawDoNotResend = parseBoolean(value("do_not_resend", "do_not_contact"));
   const status =
@@ -794,10 +800,6 @@ function isContactFormType(contactType: string) {
   );
 }
 
-function firstNonEmpty(...values: string[]) {
-  return values.find((value) => value.trim()) ?? "";
-}
-
 function inferStatus({
   followUpDate,
   nextAction,
@@ -903,30 +905,6 @@ function hasExplicitHardBlockAction(nextAction: string) {
     normalized.includes("bounced") ||
     normalized.includes("blocked")
   );
-}
-
-function parseSourceTimestamp(value: string) {
-  return parseHistoricalTimestamp(value);
-}
-
-function parseFollowUpDate(value: string) {
-  return parseHistoricalTimestamp(value);
-}
-
-function parseHistoricalTimestamp(value: string) {
-  const trimmed = value.trim();
-
-  if (!trimmed) {
-    return null;
-  }
-
-  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-    return new Date(`${trimmed}T09:00:00`).toISOString();
-  }
-
-  const parsed = new Date(trimmed);
-
-  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
 function looksLikeUrl(value: string) {
