@@ -41,8 +41,8 @@ The app creates a local SQLite database automatically at:
 For production, set:
 
 ```text
-DATABASE_PATH=/data/outreach-crm/app.sqlite
-BACKUP_DIR=/data/outreach-crm/backups
+DATABASE_PATH=/home/reach-log/reachlog-pzjckw1w.on-forge.com/shared/data/app.sqlite
+BACKUP_DIR=/home/reach-log/reachlog-pzjckw1w.on-forge.com/shared/data/backups
 ```
 
 ## Environment

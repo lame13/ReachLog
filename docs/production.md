@@ -23,8 +23,8 @@ Use absolute production paths:
 
 ```text
 TZ=Asia/Bangkok
-DATABASE_PATH=/data/outreach-crm/app.sqlite
-BACKUP_DIR=/data/outreach-crm/backups
+DATABASE_PATH=/home/reach-log/reachlog-pzjckw1w.on-forge.com/shared/data/app.sqlite
+BACKUP_DIR=/home/reach-log/reachlog-pzjckw1w.on-forge.com/shared/data/backups
 B2_REMOTE=b2:your-bucket/outreach-crm/
 SEED_DEMO_DATA=false
 
@@ -39,11 +39,13 @@ Store production env in `/etc/reachlog.env` owned by root:
 chmod 600 /etc/reachlog.env
 ```
 
-The database and backups should be owned by the service user:
+The database and backups should live in a stable directory owned by the service
+user. On Forge with an isolated site user, do not use `/data` unless you have
+explicitly created and chowned it. Prefer the site-owned `shared/data`
+directory:
 
 ```bash
-mkdir -p /data/outreach-crm/backups
-chown -R reachlog:reachlog /data/outreach-crm
+mkdir -p /home/reach-log/reachlog-pzjckw1w.on-forge.com/shared/data/backups
 ```
 
 ## Build And Run
@@ -98,7 +100,7 @@ Recommended Forge shape:
 ```text
 Forge Nginx TLS site -> 127.0.0.1:3007 Next.js daemon
                                   |
-                                  -> /data/outreach-crm/app.sqlite
+                                  -> /home/reach-log/reachlog-pzjckw1w.on-forge.com/shared/data/app.sqlite
                                   -> Forge scheduled jobs
                                   -> Proton Bridge on the same VDS
 ```
@@ -108,13 +110,13 @@ Forge Nginx TLS site -> 127.0.0.1:3007 Next.js daemon
 Create a normal Forge site, for example:
 
 ```text
-reachlog.example.com
+reachlog-pzjckw1w.on-forge.com
 ```
 
 Install the Git repository into:
 
 ```text
-/home/forge/reachlog.example.com
+/home/reach-log/reachlog-pzjckw1w.on-forge.com
 ```
 
 Use a dedicated port so it does not collide with anything else:
@@ -131,8 +133,8 @@ In Forge's environment editor for the site, set:
 NODE_ENV=production
 TZ=Asia/Bangkok
 PORT=3007
-DATABASE_PATH=/data/outreach-crm/app.sqlite
-BACKUP_DIR=/data/outreach-crm/backups
+DATABASE_PATH=/home/reach-log/reachlog-pzjckw1w.on-forge.com/shared/data/app.sqlite
+BACKUP_DIR=/home/reach-log/reachlog-pzjckw1w.on-forge.com/shared/data/backups
 B2_REMOTE=b2:your-bucket/outreach-crm/
 SEED_DEMO_DATA=false
 
@@ -181,19 +183,21 @@ absolute-path defaults.
 Run this one-time setup over SSH first:
 
 ```bash
-APP_USER=reach-log
-sudo mkdir -p /data/outreach-crm/backups
-sudo chown -R "$APP_USER:$APP_USER" /data/outreach-crm
+mkdir -p /home/reach-log/reachlog-pzjckw1w.on-forge.com/shared/data/backups
 ```
 
-Use the actual Forge site user here. If the Node process runs as an isolated
-site user such as `reach-log`, the SQLite data directory must be writable by
-that same user. Do not leave it owned by `forge` or `root`.
+The SQLite directory must be writable by `reach-log`. Do not put the database
+under `releases/` because deploys rotate that directory. If ownership is wrong,
+repair it once:
+
+```bash
+sudo chown -R reach-log:reach-log /home/reach-log/reachlog-pzjckw1w.on-forge.com/shared
+```
 
 Use this as the Forge deployment script:
 
 ```bash
-cd /home/forge/reachlog.example.com
+cd /home/reach-log/reachlog-pzjckw1w.on-forge.com
 
 npm ci
 npm run prod:check
@@ -213,7 +217,7 @@ summary text as `date=YYYY-MM-DD`, deploy the timestamp parser fix and run this
 one-time backfill:
 
 ```bash
-cd /home/forge/reachlog.example.com
+cd /home/reach-log/reachlog-pzjckw1w.on-forge.com
 npm run worker:backup
 npm run prod:backfill-source-timestamps
 ```
@@ -226,9 +230,9 @@ longer all show the import timestamp.
 Create a Forge daemon:
 
 ```text
-Directory: /home/forge/reachlog.example.com
+Directory: /home/reach-log/reachlog-pzjckw1w.on-forge.com
 Command: npm run start
-User: forge
+User: reach-log
 ```
 
 Because `PORT=3007` is in the Forge environment, the standalone Next server
@@ -287,25 +291,25 @@ is skipped instead of running the same worker twice.
 Every minute:
 
 ```bash
-cd /home/forge/reachlog.example.com && npm run worker:mail-sync
+cd /home/reach-log/reachlog-pzjckw1w.on-forge.com && npm run worker:mail-sync
 ```
 
 Every 15 minutes:
 
 ```bash
-cd /home/forge/reachlog.example.com && npm run worker:followup-check
+cd /home/reach-log/reachlog-pzjckw1w.on-forge.com && npm run worker:followup-check
 ```
 
 Every 10-15 minutes if EmailListVerify is enabled:
 
 ```bash
-cd /home/forge/reachlog.example.com && npm run worker:email-verify
+cd /home/reach-log/reachlog-pzjckw1w.on-forge.com && npm run worker:email-verify
 ```
 
 Daily, for example 03:20:
 
 ```bash
-cd /home/forge/reachlog.example.com && npm run worker:backup
+cd /home/reach-log/reachlog-pzjckw1w.on-forge.com && npm run worker:backup
 ```
 
 ### 7. Forge Versus systemd
@@ -333,7 +337,7 @@ rclone lsd b2:
 Restore test:
 
 ```bash
-gunzip -c /data/outreach-crm/backups/app-YYYY-MM-DD.sqlite.gz > /tmp/reachlog-restore.sqlite
+gunzip -c /home/reach-log/reachlog-pzjckw1w.on-forge.com/shared/data/backups/app-YYYY-MM-DD.sqlite.gz > /tmp/reachlog-restore.sqlite
 DATABASE_PATH=/tmp/reachlog-restore.sqlite npm run worker:followup-check
 ```
 
@@ -344,7 +348,7 @@ The restore test should open the database and exit cleanly.
 Before enabling IMAP sync, list the mailbox names exposed by Proton Bridge:
 
 ```bash
-cd /home/forge/reachlog.example.com && npm run worker:list-mailboxes
+cd /home/reach-log/reachlog-pzjckw1w.on-forge.com && npm run worker:list-mailboxes
 ```
 
 Set the folders explicitly:

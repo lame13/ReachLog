@@ -3,6 +3,16 @@ import { z } from "zod";
 
 process.env.TZ ||= "Asia/Bangkok";
 
+const forgeAppRoot = "/home/reach-log/reachlog-pzjckw1w.on-forge.com";
+const isForgeAppPath = process.cwd().startsWith(forgeAppRoot);
+const usesForgeDefaults = process.env.NODE_ENV === "production" || isForgeAppPath;
+const defaultDatabasePath = usesForgeDefaults
+  ? `${forgeAppRoot}/shared/data/app.sqlite`
+  : ".data/app.sqlite";
+const defaultBackupDir = usesForgeDefaults
+  ? `${forgeAppRoot}/shared/data/backups`
+  : ".data/backups";
+
 const booleanFromString = z
   .string()
   .optional()
@@ -17,7 +27,7 @@ const portFromString = (fallback: number) =>
 
 const EnvSchema = z.object({
   TZ: z.string().default("Asia/Bangkok"),
-  DATABASE_PATH: z.string().default(".data/app.sqlite"),
+  DATABASE_PATH: z.string().default(defaultDatabasePath),
   SEED_DEMO_DATA: booleanFromString,
 
   APP_BASIC_AUTH_ENABLED: booleanFromString,
@@ -50,7 +60,7 @@ const EnvSchema = z.object({
   EMAILLISTVERIFY_TIMEOUT_MS: portFromString(15000),
   EMAILLISTVERIFY_BATCH_SIZE: portFromString(25),
 
-  BACKUP_DIR: z.string().default(".data/backups"),
+  BACKUP_DIR: z.string().default(defaultBackupDir),
   B2_REMOTE: z.string().optional()
 });
 
