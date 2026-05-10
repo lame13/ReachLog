@@ -22,6 +22,16 @@ export type TargetFilters = {
   flag?: string;
 };
 
+export const analyticsRangeOptions = [
+  { key: "7d", label: "7 days" },
+  { key: "14d", label: "2 weeks" },
+  { key: "this_month", label: "This month" },
+  { key: "last_month", label: "Last month" },
+  { key: "30d", label: "Last 30 days" }
+] as const;
+
+export type AnalyticsRangeKey = (typeof analyticsRangeOptions)[number]["key"];
+
 export type TargetListRow = {
   id: string;
   companyName: string;
@@ -395,9 +405,10 @@ export function getFollowups(filter: "due" | "overdue" | "upcoming" | "all" = "a
   return rows;
 }
 
-export function getAnalyticsData() {
+export function getAnalyticsData(rangeKey: AnalyticsRangeKey = "7d") {
   const db = getDb();
   const sqlite = getSqlite();
+  const dailyRange = getAnalyticsDateRange(rangeKey);
 
   const eventCounts = db
     .select({
@@ -503,14 +514,220 @@ export function getAnalyticsData() {
     companyName: string | null;
   }>;
 
+  const dailyActivity = getDailyActivity(sqlite, dailyRange.start, dailyRange.end);
+
   return {
     eventCounts,
     sourceCounts,
     statusCounts,
     metrics,
     sourcePerformance,
-    recentEvents
+    recentEvents,
+    dailyActivity,
+    dailyRange: {
+      key: rangeKey,
+      label: dailyRange.label,
+      start: dailyRange.start.toISOString(),
+      end: dailyRange.end.toISOString()
+    }
   };
+}
+
+function getDailyActivity(sqlite: ReturnType<typeof getSqlite>, start: Date, end: Date) {
+  const buckets = createDailyBuckets(start, end);
+  const rows = sqlite
+    .prepare(
+      `
+      SELECT
+        entity_id as entityId,
+        event_type as eventType,
+        created_at as createdAt
+      FROM events
+      WHERE created_at >= ?
+        AND created_at <= ?
+        AND event_type IN (
+          'outreach_logged',
+          'email_sent',
+          'form_submitted',
+          'reply_received',
+          'email_received',
+          'email_bounced',
+          'bounced',
+          'followup_sent'
+        )
+      ORDER BY created_at ASC
+    `
+    )
+    .all(start.toISOString(), end.toISOString()) as Array<{
+    entityId: string;
+    eventType: string;
+    createdAt: string;
+  }>;
+
+  const targetKey = (row: { entityId: string; eventType: string; createdAt: string }) =>
+    row.entityId || `${row.eventType}:${row.createdAt}`;
+
+  for (const row of rows) {
+    const key = dateKey(new Date(row.createdAt));
+    const bucket = buckets.get(key);
+
+    if (!bucket) {
+      continue;
+    }
+
+    if (
+      row.eventType === "outreach_logged" ||
+      row.eventType === "email_sent" ||
+      row.eventType === "form_submitted"
+    ) {
+      bucket.outreached.add(targetKey(row));
+      continue;
+    }
+
+    if (row.eventType === "reply_received" || row.eventType === "email_received") {
+      bucket.replied.add(targetKey(row));
+      continue;
+    }
+
+    if (row.eventType === "email_bounced" || row.eventType === "bounced") {
+      bucket.bounced.add(targetKey(row));
+      continue;
+    }
+
+    if (row.eventType === "followup_sent") {
+      bucket.followups.add(targetKey(row));
+    }
+  }
+
+  return Array.from(buckets.values()).map((bucket) => ({
+    date: bucket.date,
+    label: bucket.label,
+    outreached: bucket.outreached.size,
+    replied: bucket.replied.size,
+    bounced: bucket.bounced.size,
+    followups: bucket.followups.size,
+    total:
+      bucket.outreached.size +
+      bucket.replied.size +
+      bucket.bounced.size +
+      bucket.followups.size
+  }));
+}
+
+function createDailyBuckets(start: Date, end: Date) {
+  const buckets = new Map<
+    string,
+    {
+      date: string;
+      label: string;
+      outreached: Set<string>;
+      replied: Set<string>;
+      bounced: Set<string>;
+      followups: Set<string>;
+    }
+  >();
+  const cursor = startOfDay(start);
+
+  while (cursor <= end) {
+    const key = dateKey(cursor);
+    buckets.set(key, {
+      date: key,
+      label: formatShortDay(cursor),
+      outreached: new Set(),
+      replied: new Set(),
+      bounced: new Set(),
+      followups: new Set()
+    });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return buckets;
+}
+
+function getAnalyticsDateRange(rangeKey: AnalyticsRangeKey) {
+  const now = new Date();
+
+  if (rangeKey === "14d") {
+    return {
+      key: rangeKey,
+      label: "2 weeks",
+      start: daysAgoStart(13, now),
+      end: endOfDay(now)
+    };
+  }
+
+  if (rangeKey === "this_month") {
+    return {
+      key: rangeKey,
+      label: "This month",
+      start: new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0),
+      end: endOfDay(now)
+    };
+  }
+
+  if (rangeKey === "last_month") {
+    return {
+      key: rangeKey,
+      label: "Last month",
+      start: new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0),
+      end: new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999)
+    };
+  }
+
+  if (rangeKey === "30d") {
+    return {
+      key: rangeKey,
+      label: "Last 30 days",
+      start: daysAgoStart(29, now),
+      end: endOfDay(now)
+    };
+  }
+
+  return {
+    key: "7d",
+    label: "7 days",
+    start: daysAgoStart(6, now),
+    end: endOfDay(now)
+  };
+}
+
+export function getAnalyticsRangeKey(value: string | undefined): AnalyticsRangeKey {
+  return analyticsRangeOptions.some((option) => option.key === value)
+    ? (value as AnalyticsRangeKey)
+    : "7d";
+}
+
+function daysAgoStart(days: number, from: Date) {
+  const date = new Date(from);
+  date.setDate(date.getDate() - days);
+  return startOfDay(date);
+}
+
+function startOfDay(date: Date) {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+  return next;
+}
+
+function endOfDay(date: Date) {
+  const next = new Date(date);
+  next.setHours(23, 59, 59, 999);
+  return next;
+}
+
+function dateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function formatShortDay(date: Date) {
+  return new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric"
+  }).format(date);
 }
 
 export function getModuleSettings() {

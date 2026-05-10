@@ -2,11 +2,23 @@ import Link from "next/link";
 import { Clock3, MailCheck, Send, Target } from "lucide-react";
 import { ExportLinks } from "@/components/export-links";
 import { MetricCard } from "@/components/metric-card";
-import { formatDateTime } from "@/modules/core/dates";
-import { getAnalyticsData } from "@/modules/outreach/queries";
+import { formatDate, formatDateTime } from "@/modules/core/dates";
+import {
+  analyticsRangeOptions,
+  getAnalyticsData,
+  getAnalyticsRangeKey
+} from "@/modules/outreach/queries";
 
-export default function AnalyticsPage() {
-  const data = getAnalyticsData();
+type PageProps = {
+  searchParams?: Promise<{
+    range?: string;
+  }>;
+};
+
+export default async function AnalyticsPage({ searchParams }: PageProps) {
+  const params = await searchParams;
+  const rangeKey = getAnalyticsRangeKey(params?.range);
+  const data = getAnalyticsData(rangeKey);
   const replyRate = percentage(data.metrics.repliedTargets, data.metrics.touchedTargets);
   const touchRate = percentage(data.metrics.touchedTargets, data.metrics.totalTargets);
 
@@ -51,6 +63,19 @@ export default function AnalyticsPage() {
           value={data.metrics.openFollowups}
         />
       </div>
+
+      <section className="mt-6 rounded-lg border border-line bg-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
+          <div>
+            <h2 className="font-semibold">Daily Activity</h2>
+            <p className="mt-1 text-xs text-muted">
+              {formatDate(data.dailyRange.start)} - {formatDate(data.dailyRange.end)}
+            </p>
+          </div>
+          <RangeSelector selected={data.dailyRange.key} />
+        </div>
+        <DailyActivityChart rows={data.dailyActivity} />
+      </section>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_420px]">
         <section className="rounded-lg border border-line bg-white shadow-sm">
@@ -137,6 +162,100 @@ export default function AnalyticsPage() {
         />
       </div>
     </>
+  );
+}
+
+function RangeSelector({ selected }: { selected: string }) {
+  return (
+    <div className="flex flex-wrap items-center gap-1 rounded-md border border-line bg-panel p-1">
+      {analyticsRangeOptions.map((option) => {
+        const active = option.key === selected;
+
+        return (
+          <Link
+            className={`inline-flex h-8 items-center rounded-md px-2 text-xs font-medium ${
+              active ? "bg-white text-ink shadow-sm" : "text-muted hover:bg-white"
+            }`}
+            href={option.key === "7d" ? "/analytics" : `/analytics?range=${option.key}`}
+            key={option.key}
+          >
+            {option.label}
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
+function DailyActivityChart({
+  rows
+}: {
+  rows: Array<{
+    date: string;
+    label: string;
+    outreached: number;
+    replied: number;
+    bounced: number;
+    followups: number;
+    total: number;
+  }>;
+}) {
+  const series = [
+    { key: "outreached", label: "Outreached", className: "bg-sky-500" },
+    { key: "replied", label: "Replies", className: "bg-emerald-500" },
+    { key: "bounced", label: "Bounced", className: "bg-rose-500" },
+    { key: "followups", label: "Follow-ups", className: "bg-amber-500" }
+  ] as const;
+  const max = Math.max(...rows.map((row) => row.total), 1);
+
+  return (
+    <div>
+      <div className="flex flex-wrap gap-3 border-b border-line px-4 py-3 text-xs text-muted">
+        {series.map((item) => (
+          <div className="inline-flex items-center gap-2" key={item.key}>
+            <span className={`size-2.5 rounded-sm ${item.className}`} />
+            {item.label}
+          </div>
+        ))}
+      </div>
+      <div className="overflow-x-auto">
+        <div className="flex min-w-[760px] items-end gap-2 px-4 py-4">
+          {rows.map((row) => {
+            const height = row.total ? Math.max((row.total / max) * 100, 6) : 2;
+
+            return (
+              <div className="flex min-w-8 flex-1 flex-col items-center gap-2" key={row.date}>
+                <div className="flex h-40 w-full max-w-10 items-end">
+                  <div
+                    className="flex w-full flex-col-reverse overflow-hidden rounded-sm bg-panel"
+                    style={{ height: `${height}%` }}
+                    title={`${row.date}: ${row.outreached} outreached, ${row.replied} replies, ${row.bounced} bounced, ${row.followups} follow-ups`}
+                  >
+                    {series.map((item) => {
+                      const value = row[item.key];
+
+                      if (!value || !row.total) {
+                        return null;
+                      }
+
+                      return (
+                        <div
+                          className={item.className}
+                          key={item.key}
+                          style={{ height: `${(value / row.total) * 100}%` }}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="w-14 text-center text-[11px] text-muted">{row.label}</div>
+                <div className="text-xs font-medium">{row.total}</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
   );
 }
 
