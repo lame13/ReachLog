@@ -153,7 +153,8 @@ SMTP_FROM=
 IMAP_ENABLED=false
 IMAP_HOST=127.0.0.1
 IMAP_PORT=1143
-IMAP_SECURE=false
+IMAP_SECURITY=starttls
+IMAP_TLS_VERIFY=false
 IMAP_USER=
 IMAP_PASS=
 IMAP_MAILBOXES=INBOX,Sent
@@ -168,6 +169,11 @@ EMAILLISTVERIFY_API_KEY=
 EMAILLISTVERIFY_TIMEOUT_MS=15000
 EMAILLISTVERIFY_BATCH_SIZE=25
 ```
+
+`IMAP_SECURITY` can be `plain`, `starttls`, `tls`, or `auto`. For Proton
+Bridge on localhost, start with `starttls` and `IMAP_TLS_VERIFY=false`. The old
+`IMAP_SECURE=true|false` variable is still accepted as a fallback, but
+`IMAP_SECURITY` takes precedence when set.
 
 Turn `SMTP_ENABLED` and `IMAP_ENABLED` on only after Proton Bridge is installed
 and tested on the VDS.

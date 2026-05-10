@@ -9,6 +9,7 @@ import {
   extractThreadHeaderCandidates,
   normalizeSubject
 } from "../src/modules/mailbox/threading";
+import { getImapFlowOptions, getImapSecurityMode } from "../src/modules/mailbox/imap-client";
 import { normalizeDomain } from "../src/modules/outreach/dedupe";
 import { sendTelegramMessage } from "../src/modules/telegram/notify";
 
@@ -49,15 +50,11 @@ async function main() {
 }
 
 async function runMailSync() {
-  const client = new ImapFlow({
-    host: env.IMAP_HOST,
-    port: env.IMAP_PORT,
-    secure: env.IMAP_SECURE,
-    auth: {
-      user: env.IMAP_USER ?? "",
-      pass: env.IMAP_PASS ?? ""
-    }
-  });
+  console.log(
+    `mail-sync connecting ${env.IMAP_HOST}:${env.IMAP_PORT} security=${getImapSecurityMode()} tlsVerify=${String(env.IMAP_TLS_VERIFY)}`
+  );
+
+  const client = new ImapFlow(getImapFlowOptions());
 
   await client.connect();
 

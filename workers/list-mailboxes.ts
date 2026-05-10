@@ -1,5 +1,6 @@
 import { ImapFlow } from "imapflow";
 import { env } from "../src/modules/core/env";
+import { getImapFlowOptions, getImapSecurityMode } from "../src/modules/mailbox/imap-client";
 
 async function main() {
   if (!env.IMAP_ENABLED) {
@@ -7,15 +8,11 @@ async function main() {
     return;
   }
 
-  const client = new ImapFlow({
-    host: env.IMAP_HOST,
-    port: env.IMAP_PORT,
-    secure: env.IMAP_SECURE,
-    auth: {
-      user: env.IMAP_USER ?? "",
-      pass: env.IMAP_PASS ?? ""
-    }
-  });
+  console.log(
+    `list-mailboxes connecting ${env.IMAP_HOST}:${env.IMAP_PORT} security=${getImapSecurityMode()} tlsVerify=${String(env.IMAP_TLS_VERIFY)}`
+  );
+
+  const client = new ImapFlow(getImapFlowOptions());
 
   await client.connect();
 

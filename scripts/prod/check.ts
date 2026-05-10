@@ -154,7 +154,7 @@ function checkImapConfig(): Check {
 
   return pass(
     "IMAP config",
-    `${env.IMAP_HOST}:${env.IMAP_PORT} secure=${String(env.IMAP_SECURE)}`
+    `${env.IMAP_HOST}:${env.IMAP_PORT} security=${env.IMAP_SECURITY ?? (env.IMAP_SECURE ? "tls" : "auto")} tlsVerify=${String(env.IMAP_TLS_VERIFY)}`
   );
 }
 

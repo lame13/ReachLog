@@ -63,7 +63,8 @@ SEED_DEMO_DATA=false
 SMTP_ENABLED=false
 SMTP_SECURE=false
 IMAP_ENABLED=false
-IMAP_SECURE=false
+IMAP_SECURITY=starttls
+IMAP_TLS_VERIFY=false
 IMAP_MAILBOXES=INBOX,Sent
 IMAP_LOOKBACK_DAYS=90
 TELEGRAM_ENABLED=false
@@ -175,6 +176,8 @@ Use Proton Bridge on the same VDS or private network as the app and point the en
 ```text
 IMAP_HOST=127.0.0.1
 IMAP_PORT=1143
+IMAP_SECURITY=starttls
+IMAP_TLS_VERIFY=false
 SMTP_HOST=127.0.0.1
 SMTP_PORT=1025
 ```
