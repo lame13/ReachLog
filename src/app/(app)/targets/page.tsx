@@ -18,20 +18,29 @@ type PageProps = {
     source?: string;
     domain?: string;
     flag?: string;
+    page?: string;
     sendTargetId?: string;
     showCreate?: string;
   }>;
 };
 
+const TARGETS_PER_PAGE = 50;
+
 export default async function TargetsPage({ searchParams }: PageProps) {
   const params = await searchParams;
-  const targets = getTargets({
+  const allTargets = getTargets({
     q: params?.q,
     status: params?.status,
     source: params?.source,
     domain: params?.domain,
     flag: params?.flag
   });
+  const totalTargets = allTargets.length;
+  const totalPages = Math.max(1, Math.ceil(totalTargets / TARGETS_PER_PAGE));
+  const currentPage = clampPage(params?.page, totalPages);
+  const pageStart = (currentPage - 1) * TARGETS_PER_PAGE;
+  const pageEnd = pageStart + TARGETS_PER_PAGE;
+  const targets = allTargets.slice(pageStart, pageEnd);
   const filterOptions = getTargetFilterOptions();
   const sendTarget = getSendTarget(params?.sendTargetId);
   const showCreate = params?.showCreate === "1";
@@ -42,6 +51,11 @@ export default async function TargetsPage({ searchParams }: PageProps) {
     domain: params?.domain,
     flag: params?.flag
   };
+  const listParams = {
+    ...exportParams,
+    page: currentPage > 1 ? String(currentPage) : undefined
+  };
+  const closeHref = targetsHref(listParams);
 
   return (
     <>
@@ -84,9 +98,24 @@ export default async function TargetsPage({ searchParams }: PageProps) {
             />
           </div>
         </label>
-        <FilterSelect label="Status" name="status" options={filterOptions.statuses} value={params?.status} />
-        <FilterSelect label="Source" name="source" options={filterOptions.sources} value={params?.source} />
-        <FilterSelect label="Domain" name="domain" options={filterOptions.domains} value={params?.domain} />
+        <FilterSelect
+          label="Status"
+          name="status"
+          options={filterOptions.statuses}
+          value={params?.status}
+        />
+        <FilterSelect
+          label="Source"
+          name="source"
+          options={filterOptions.sources}
+          value={params?.source}
+        />
+        <FilterSelect
+          label="Domain"
+          name="domain"
+          options={filterOptions.domains}
+          value={params?.domain}
+        />
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-muted">Flag</span>
           <select
@@ -113,6 +142,23 @@ export default async function TargetsPage({ searchParams }: PageProps) {
       </form>
 
       <section className="rounded-lg border border-line bg-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3 text-sm">
+          <div className="text-muted">
+            {totalTargets ? (
+              <>
+                Showing {pageStart + 1}-{Math.min(pageEnd, totalTargets)} of{" "}
+                {totalTargets}, sorted by latest activity
+              </>
+            ) : (
+              "No matching targets"
+            )}
+          </div>
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            params={exportParams}
+          />
+        </div>
         <div className="overflow-x-auto">
           <table className="min-w-[960px] text-sm">
             <thead className="bg-panel text-left text-muted">
@@ -135,7 +181,7 @@ export default async function TargetsPage({ searchParams }: PageProps) {
                         {target.companyName}
                       </Link>
                       <div className="mt-1 text-xs text-muted">
-                        Updated {formatDateTime(target.updatedAt)}
+                        Activity {formatDateTime(target.activityAt)}
                       </div>
                     </td>
                     <td className="px-4 py-3 text-muted">
@@ -160,7 +206,7 @@ export default async function TargetsPage({ searchParams }: PageProps) {
                     <td className="px-4 py-3">
                       <Link
                         className="inline-flex h-9 items-center gap-2 rounded-md bg-ink px-3 text-xs font-medium text-white"
-                        href={`/targets?sendTargetId=${target.id}`}
+                        href={targetsHref({ ...listParams, sendTargetId: target.id })}
                       >
                         <Send className="size-3.5" aria-hidden="true" />
                         Send
@@ -178,11 +224,114 @@ export default async function TargetsPage({ searchParams }: PageProps) {
             </tbody>
           </table>
         </div>
+        {totalTargets > TARGETS_PER_PAGE && (
+          <div className="flex justify-end border-t border-line px-4 py-3">
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              params={exportParams}
+            />
+          </div>
+        )}
       </section>
 
-      <SendEmailModal closeHref="/targets" target={sendTarget} />
+      <SendEmailModal closeHref={closeHref} target={sendTarget} />
     </>
   );
+}
+
+function Pagination({
+  currentPage,
+  totalPages,
+  params
+}: {
+  currentPage: number;
+  totalPages: number;
+  params: Record<string, string | undefined>;
+}) {
+  if (totalPages <= 1) {
+    return null;
+  }
+
+  const previousPage = currentPage - 1;
+  const nextPage = currentPage + 1;
+
+  return (
+    <nav className="inline-flex items-center gap-2" aria-label="Targets pagination">
+      <PaginationLink
+        disabled={currentPage <= 1}
+        href={targetsHref({
+          ...params,
+          page: previousPage > 1 ? String(previousPage) : undefined
+        })}
+      >
+        Previous
+      </PaginationLink>
+      <span className="text-xs text-muted">
+        Page {currentPage} of {totalPages}
+      </span>
+      <PaginationLink
+        disabled={currentPage >= totalPages}
+        href={targetsHref({
+          ...params,
+          page: nextPage <= totalPages ? String(nextPage) : undefined
+        })}
+      >
+        Next
+      </PaginationLink>
+    </nav>
+  );
+}
+
+function PaginationLink({
+  children,
+  disabled,
+  href
+}: {
+  children: React.ReactNode;
+  disabled: boolean;
+  href: string;
+}) {
+  if (disabled) {
+    return (
+      <span className="inline-flex h-9 items-center rounded-md border border-line px-3 text-xs font-medium text-muted opacity-50">
+        {children}
+      </span>
+    );
+  }
+
+  return (
+    <Link
+      className="inline-flex h-9 items-center rounded-md border border-line px-3 text-xs font-medium hover:bg-panel"
+      href={href}
+    >
+      {children}
+    </Link>
+  );
+}
+
+function targetsHref(params: Record<string, string | undefined>) {
+  const searchParams = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(params)) {
+    if (value) {
+      searchParams.set(key, value);
+    }
+  }
+
+  const query = searchParams.toString();
+
+  return query ? `/targets?${query}` : "/targets";
+}
+
+function clampPage(value: string | undefined, totalPages: number) {
+  const parsed = Number(value ?? 1);
+
+  if (!Number.isFinite(parsed)) {
+    return 1;
+  }
+
+  return Math.min(Math.max(1, Math.floor(parsed)), totalPages);
 }
 
 function CreateTargetPanel() {

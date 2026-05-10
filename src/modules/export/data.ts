@@ -65,6 +65,7 @@ function getTargetsExport(params: URLSearchParams) {
     dedupeKey: target.dedupeKey,
     status: target.status,
     doNotResend: target.doNotResend ? 1 : 0,
+    activityAt: target.activityAt,
     updatedAt: target.updatedAt
   }));
 }

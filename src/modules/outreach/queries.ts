@@ -22,6 +22,23 @@ export type TargetFilters = {
   flag?: string;
 };
 
+export type TargetListRow = {
+  id: string;
+  companyName: string;
+  websiteUrl: string | null;
+  sourceType: string;
+  sourceUrl: string | null;
+  dedupeKey: string;
+  status: string;
+  doNotResend: number;
+  updatedAt: string;
+  activityAt: string;
+  contactName: string | null;
+  contactEmail: string | null;
+  emailVerificationStatus: string | null;
+  domain: string | null;
+};
+
 export function getDashboardData() {
   const db = getDb();
   const sqlite = getSqlite();
@@ -147,28 +164,43 @@ export function getDashboardData() {
 }
 
 export function getTargets(filters: TargetFilters = {}) {
-  const db = getDb();
-
-  const rows = db
-    .select({
-      id: targets.id,
-      companyName: targets.companyName,
-      websiteUrl: targets.websiteUrl,
-      sourceType: targets.sourceType,
-      sourceUrl: targets.sourceUrl,
-      dedupeKey: targets.dedupeKey,
-      status: targets.status,
-      doNotResend: targets.doNotResend,
-      updatedAt: targets.updatedAt,
-      contactName: contacts.name,
-      contactEmail: contacts.email,
-      emailVerificationStatus: contacts.emailVerificationStatus,
-      domain: contacts.domain
-    })
-    .from(targets)
-    .leftJoin(contacts, eq(targets.contactId, contacts.id))
-    .orderBy(desc(targets.updatedAt))
-    .all();
+  const rows = getSqlite()
+    .prepare(
+      `
+      SELECT
+        targets.id,
+        targets.company_name as companyName,
+        targets.website_url as websiteUrl,
+        targets.source_type as sourceType,
+        targets.source_url as sourceUrl,
+        targets.dedupe_key as dedupeKey,
+        targets.status,
+        targets.do_not_resend as doNotResend,
+        targets.updated_at as updatedAt,
+        MAX(
+          targets.updated_at,
+          COALESCE((
+            SELECT MAX(COALESCE(messages.sent_at, messages.received_at, messages.created_at))
+            FROM messages
+            INNER JOIN threads ON threads.id = messages.thread_id
+            WHERE threads.target_id = targets.id
+          ), ''),
+          COALESCE((
+            SELECT MAX(threads.updated_at)
+            FROM threads
+            WHERE threads.target_id = targets.id
+          ), '')
+        ) as activityAt,
+        contacts.name as contactName,
+        contacts.email as contactEmail,
+        contacts.email_verification_status as emailVerificationStatus,
+        contacts.domain
+      FROM targets
+      LEFT JOIN contacts ON contacts.id = targets.contact_id
+      ORDER BY activityAt DESC, targets.updated_at DESC, targets.company_name ASC
+    `
+    )
+    .all() as TargetListRow[];
 
   return rows.filter((target) => {
     const q = filters.q?.trim().toLowerCase();
