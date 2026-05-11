@@ -87,25 +87,42 @@ export default async function TargetDetailPage({
             </div>
             {threads.length > 0 ? (
               <div className="divide-y divide-line">
-                {messages.map((message) => (
-                  <article key={message.id} className="p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="inline-flex items-center gap-2">
-                        <Mail className="size-4 text-muted" aria-hidden="true" />
-                        <span className="font-medium capitalize">
-                          {message.direction}
-                        </span>
-                        <span className="text-sm text-muted">
-                          {formatDateTime(message.sentAt ?? message.receivedAt)}
-                        </span>
+                {messages.map((message) => {
+                  const isUnreadInbound =
+                    message.direction === "inbound" && !message.readAt;
+
+                  return (
+                    <article
+                      key={message.id}
+                      className={`p-4 ${
+                        isUnreadInbound
+                          ? "border-l-4 border-sky-400 bg-sky-100"
+                          : ""
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="inline-flex items-center gap-2">
+                          <Mail className="size-4 text-muted" aria-hidden="true" />
+                          <span className="font-medium capitalize">
+                            {message.direction}
+                          </span>
+                          {isUnreadInbound && (
+                            <span className="rounded-md bg-sky-200 px-2 py-0.5 text-xs font-medium text-sky-900">
+                              unread
+                            </span>
+                          )}
+                          <span className="text-sm text-muted">
+                            {formatDateTime(message.sentAt ?? message.receivedAt)}
+                          </span>
+                        </div>
+                        <div className="text-sm text-muted">{message.subject}</div>
                       </div>
-                      <div className="text-sm text-muted">{message.subject}</div>
-                    </div>
-                    <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-ink">
-                      {message.bodyText}
-                    </p>
-                  </article>
-                ))}
+                      <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-ink">
+                        {message.bodyText}
+                      </p>
+                    </article>
+                  );
+                })}
               </div>
             ) : (
               <div className="p-4 text-sm text-muted">No email thread yet.</div>

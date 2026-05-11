@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS messages (
   references_header TEXT,
   sent_at TEXT,
   received_at TEXT,
+  read_at TEXT,
   raw_headers_json TEXT,
   created_at TEXT NOT NULL
 );
@@ -190,10 +191,12 @@ export function bootstrapDatabase(sqlite: SqliteDatabase) {
   sqlite.exec(schemaSql);
   ensureOutboundSendIdempotency(sqlite);
   ensureEmailVerificationColumns(sqlite);
+  ensureMessageReadColumns(sqlite);
   recordSchemaVersion(sqlite, "0001", "bootstrap_schema");
   recordSchemaVersion(sqlite, "0002", "prod_safety_tables");
   recordSchemaVersion(sqlite, "0003", "outbound_send_idempotency");
   recordSchemaVersion(sqlite, "0004", "contact_email_verification");
+  recordSchemaVersion(sqlite, "0005", "message_read_state");
 
   const seeded = sqlite
     .prepare("SELECT COUNT(*) as count FROM contacts")
@@ -225,6 +228,12 @@ function ensureEmailVerificationColumns(sqlite: SqliteDatabase) {
     if (!tableHasColumn(sqlite, "contacts", column)) {
       sqlite.exec(`ALTER TABLE contacts ADD COLUMN ${column} ${definition}`);
     }
+  }
+}
+
+function ensureMessageReadColumns(sqlite: SqliteDatabase) {
+  if (!tableHasColumn(sqlite, "messages", "read_at")) {
+    sqlite.exec("ALTER TABLE messages ADD COLUMN read_at TEXT");
   }
 }
 

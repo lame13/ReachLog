@@ -103,6 +103,7 @@ export const messages = sqliteTable(
     referencesHeader: text("references_header"),
     sentAt: text("sent_at"),
     receivedAt: text("received_at"),
+    readAt: text("read_at"),
     rawHeadersJson: text("raw_headers_json"),
     createdAt: text("created_at").notNull()
   },

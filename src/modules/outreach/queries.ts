@@ -54,11 +54,16 @@ export function getDashboardData() {
   const sqlite = getSqlite();
   const todayEnd = endOfTodayIso();
 
-  const [replyCount] = db
-    .select({ count: sql<number>`count(*)` })
-    .from(threads)
-    .where(eq(threads.status, "replied"))
-    .all();
+  const replyCount = sqlite
+    .prepare(
+      `
+      SELECT COUNT(*) as count
+      FROM threads
+      WHERE threads.status = 'replied'
+        AND NOT (${latestNonActionableMessageSql("threads.id")})
+    `
+    )
+    .get() as { count: number };
 
   const [followupDueCount] = db
     .select({ count: sql<number>`count(*)` })
@@ -83,23 +88,35 @@ export function getDashboardData() {
     .where(eq(threads.status, "waiting"))
     .all();
 
-  const replies = db
-    .select({
-      threadId: threads.id,
-      targetId: targets.id,
-      companyName: targets.companyName,
-      contactName: contacts.name,
-      contactEmail: contacts.email,
-      lastInboundAt: threads.lastInboundAt,
-      status: threads.status
-    })
-    .from(threads)
-    .innerJoin(targets, eq(threads.targetId, targets.id))
-    .leftJoin(contacts, eq(threads.contactId, contacts.id))
-    .where(eq(threads.status, "replied"))
-    .orderBy(desc(threads.lastInboundAt))
-    .limit(5)
-    .all();
+  const replies = sqlite
+    .prepare(
+      `
+      SELECT
+        threads.id as threadId,
+        targets.id as targetId,
+        targets.company_name as companyName,
+        contacts.name as contactName,
+        contacts.email as contactEmail,
+        threads.last_inbound_at as lastInboundAt,
+        threads.status
+      FROM threads
+      INNER JOIN targets ON targets.id = threads.target_id
+      LEFT JOIN contacts ON contacts.id = threads.contact_id
+      WHERE threads.status = 'replied'
+        AND NOT (${latestNonActionableMessageSql("threads.id")})
+      ORDER BY threads.last_inbound_at DESC
+      LIMIT 5
+    `
+    )
+    .all() as Array<{
+    threadId: string;
+    targetId: string;
+    companyName: string;
+    contactName: string | null;
+    contactEmail: string | null;
+    lastInboundAt: string | null;
+    status: string;
+  }>;
 
   const followups = getFollowups("due").slice(0, 5);
 
@@ -160,7 +177,7 @@ export function getDashboardData() {
 
   return {
     stats: {
-      repliesNeedingAction: replyCount?.count ?? 0,
+      repliesNeedingAction: replyCount.count,
       followupsDue: followupDueCount?.count ?? 0,
       overdueFollowups: overdueCount?.count ?? 0,
       sentNoReply: sentNoReplyCount?.count ?? 0,
@@ -321,9 +338,13 @@ export function getTargetDetail(id: string) {
         .select()
         .from(messages)
         .where(inArray(messages.threadId, threadIds))
-        .orderBy(sql`COALESCE(${messages.sentAt}, ${messages.receivedAt}, ${messages.createdAt})`)
+        .orderBy(sql`COALESCE(${messages.sentAt}, ${messages.receivedAt}, ${messages.createdAt}) DESC`)
         .all()
     : [];
+
+  if (threadIds.length) {
+    markInboundMessagesRead(threadIds);
+  }
 
   const followups = db
     .select()
@@ -354,6 +375,49 @@ export function getTargetDetail(id: string) {
     forms,
     timeline
   };
+}
+
+function markInboundMessagesRead(threadIds: string[]) {
+  const placeholders = threadIds.map(() => "?").join(", ");
+
+  getSqlite()
+    .prepare(
+      `
+      UPDATE messages
+      SET read_at = ?
+      WHERE read_at IS NULL
+        AND direction = 'inbound'
+        AND thread_id IN (${placeholders})
+    `
+    )
+    .run(new Date().toISOString(), ...threadIds);
+}
+
+function latestNonActionableMessageSql(threadIdExpression: string) {
+  const latestSubject = `
+    COALESCE((
+      SELECT lower(messages.subject)
+      FROM messages
+      WHERE messages.thread_id = ${threadIdExpression}
+      ORDER BY COALESCE(messages.sent_at, messages.received_at, messages.created_at) DESC
+      LIMIT 1
+    ), '')
+  `;
+  const latestFrom = `
+    COALESCE((
+      SELECT lower(messages.from_email)
+      FROM messages
+      WHERE messages.thread_id = ${threadIdExpression}
+      ORDER BY COALESCE(messages.sent_at, messages.received_at, messages.created_at) DESC
+      LIMIT 1
+    ), '')
+  `;
+
+  return `
+    ${latestSubject} LIKE '%wordpress.org thread:%'
+    OR ${latestSubject} LIKE '%[wordpress.org]%'
+    OR ${latestFrom} LIKE '%wordpress.org%'
+  `;
 }
 
 export function getFollowups(filter: "due" | "overdue" | "upcoming" | "all" = "all") {

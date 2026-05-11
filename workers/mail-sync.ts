@@ -126,13 +126,21 @@ async function importMailbox(client: ImapFlow, mailbox: string) {
       const subject = parsed.subject ?? "(no subject)";
       const normalizedSubject = normalizeSubject(subject);
       const direction = isSentMailbox(mailbox) ? "outbound" : "inbound";
+      const fromEmail = firstAddress(parsed.from) ?? "";
+      const notification = classifyNonActionableInboundMessage(
+        parsed,
+        subject,
+        fromEmail,
+        direction
+      );
       const thread = findOrCreateThread({
         parsed,
         mailbox,
         direction,
         subject,
         normalizedSubject,
-        messageId
+        messageId,
+        nonActionableInbound: notification.nonActionable
       });
 
       if (!thread) {
@@ -154,7 +162,9 @@ async function importMailbox(client: ImapFlow, mailbox: string) {
         mailbox,
         direction,
         subject,
-        messageId
+        messageId,
+        nonActionableInbound: notification.nonActionable,
+        nonActionableReason: notification.reason
       });
 
       imported += 1;
@@ -249,7 +259,8 @@ function findOrCreateThread({
   direction,
   subject,
   normalizedSubject,
-  messageId
+  messageId,
+  nonActionableInbound
 }: {
   parsed: ParsedMail;
   mailbox: string;
@@ -257,6 +268,7 @@ function findOrCreateThread({
   subject: string;
   normalizedSubject: string;
   messageId: string;
+  nonActionableInbound: boolean;
 }): ThreadMatch | null {
   const headerThread = findThreadByHeaders({
     messageId,
@@ -299,7 +311,8 @@ function findOrCreateThread({
     normalizedSubject,
     messageId,
     direction,
-    messageDate: getMessageDate(parsed)
+    messageDate: getMessageDate(parsed),
+    nonActionableInbound
   });
 }
 
@@ -415,7 +428,8 @@ function createThread({
   normalizedSubject,
   messageId,
   direction,
-  messageDate
+  messageDate,
+  nonActionableInbound
 }: {
   target: TargetMatch;
   mailbox: string;
@@ -424,6 +438,7 @@ function createThread({
   messageId: string;
   direction: "inbound" | "outbound";
   messageDate: string;
+  nonActionableInbound: boolean;
 }) {
   const threadId = createId("thread");
   const now = new Date().toISOString();
@@ -448,9 +463,13 @@ function createThread({
       normalizedSubject,
       messageId,
       messageId,
-      direction === "inbound" ? messageDate : null,
+      direction === "inbound" && !nonActionableInbound ? messageDate : null,
       direction === "outbound" ? messageDate : null,
-      direction === "inbound" ? "replied" : "waiting",
+      direction === "inbound"
+        ? nonActionableInbound
+          ? "notification"
+          : "replied"
+        : "waiting",
       now,
       now
     );
@@ -469,7 +488,9 @@ async function insertMessage({
   mailbox,
   direction,
   subject,
-  messageId
+  messageId,
+  nonActionableInbound,
+  nonActionableReason
 }: {
   parsed: ParsedMail;
   thread: ThreadMatch;
@@ -477,6 +498,8 @@ async function insertMessage({
   direction: "inbound" | "outbound";
   subject: string;
   messageId: string;
+  nonActionableInbound: boolean;
+  nonActionableReason: string | null;
 }) {
   const sqlite = getSqlite();
   const messageDate = getMessageDate(parsed);
@@ -487,6 +510,7 @@ async function insertMessage({
   const isBounce =
     direction === "inbound" &&
     isDeliveryFailureMessage(parsed, subject, fromEmail);
+  const isNotification = nonActionableInbound && !isBounce;
 
   const transaction = sqlite.transaction(() => {
     sqlite
@@ -525,14 +549,15 @@ async function insertMessage({
       direction,
       messageDate,
       messageId,
-      isBounce
+      isBounce,
+      nonActionableInbound: isNotification
     });
 
     if (isBounce) {
       sqlite
         .prepare("UPDATE targets SET status = 'bounced_dead_address', updated_at = ? WHERE id = ?")
         .run(now, thread.targetId);
-    } else {
+    } else if (!isNotification) {
       sqlite
         .prepare(
           `
@@ -575,16 +600,20 @@ async function insertMessage({
         thread.targetId,
         isBounce
           ? "email_bounced"
-          : direction === "inbound"
-            ? "reply_received"
-            : "email_sent",
+          : isNotification
+            ? "mail_notification_received"
+            : direction === "inbound"
+              ? "reply_received"
+              : "email_sent",
         JSON.stringify({
           mailbox,
           messageId,
           subject,
           from: fromEmail,
           to: toEmail,
-          bounced: isBounce
+          bounced: isBounce,
+          nonActionable: isNotification,
+          reason: nonActionableReason
         }),
         now
       );
@@ -594,7 +623,7 @@ async function insertMessage({
 
   const state = transaction();
 
-  if (direction === "inbound" && state.latestIsInbound && !isBounce) {
+  if (direction === "inbound" && state.latestIsInbound && !isBounce && !isNotification) {
     await sendTelegramMessage(`Reply received: ${fromEmail}\n${subject}`);
   }
 }
@@ -604,18 +633,20 @@ function updateThreadAfterMessage({
   direction,
   messageDate,
   messageId,
-  isBounce
+  isBounce,
+  nonActionableInbound
 }: {
   threadId: string;
   direction: "inbound" | "outbound";
   messageDate: string;
   messageId: string;
   isBounce: boolean;
+  nonActionableInbound: boolean;
 }) {
   const sqlite = getSqlite();
   const now = new Date().toISOString();
 
-  if (direction === "inbound") {
+  if (direction === "inbound" && !nonActionableInbound) {
     sqlite
       .prepare(
         `
@@ -629,7 +660,7 @@ function updateThreadAfterMessage({
       `
       )
       .run(messageDate, messageDate, now, threadId);
-  } else {
+  } else if (direction === "outbound") {
     sqlite
       .prepare(
         `
@@ -677,7 +708,11 @@ function updateThreadAfterMessage({
       `
       UPDATE threads
       SET last_message_id = ?,
-          status = CASE WHEN ? = 1 THEN 'bounced' ELSE ? END,
+          status = CASE
+            WHEN ? = 1 THEN 'bounced'
+            WHEN ? = 1 THEN status
+            ELSE ?
+          END,
           next_followup_at = CASE WHEN ? = 1 THEN NULL ELSE next_followup_at END,
           updated_at = ?
       WHERE id = ?
@@ -686,6 +721,7 @@ function updateThreadAfterMessage({
     .run(
       state.latestMessageId ?? messageId,
       isBounce ? 1 : 0,
+      nonActionableInbound ? 1 : 0,
       latestIsInbound ? "replied" : "waiting",
       latestIsInbound || isBounce ? 1 : 0,
       now,
@@ -778,6 +814,38 @@ function isDeliveryFailureMessage(
     normalizedSubject.includes("delivery failure") ||
     normalizedSubject.includes("returned mail")
   );
+}
+
+function classifyNonActionableInboundMessage(
+  parsed: ParsedMail,
+  subject: string,
+  fromEmail: string,
+  direction: "inbound" | "outbound"
+) {
+  if (direction !== "inbound") {
+    return { nonActionable: false, reason: null };
+  }
+
+  const normalizedSubject = subject.toLowerCase();
+  const normalizedFrom = fromEmail.toLowerCase();
+  const fromText = parsed.from?.text.toLowerCase() ?? "";
+  const listId = String(parsed.headers.get("list-id") ?? "").toLowerCase();
+  const listPost = String(parsed.headers.get("list-post") ?? "").toLowerCase();
+  const mailingList = `${listId} ${listPost}`;
+
+  if (
+    normalizedSubject.includes("wordpress.org thread:") ||
+    normalizedSubject.includes("[wordpress.org]") ||
+    mailingList.includes("wordpress.org") ||
+    ((normalizedFrom.includes("wordpress.org") || fromText.includes("wordpress.org")) &&
+      (normalizedSubject.includes("thread:") ||
+        normalizedSubject.includes("forum") ||
+        normalizedSubject.includes("topic")))
+  ) {
+    return { nonActionable: true, reason: "wordpress_org_thread_notification" };
+  }
+
+  return { nonActionable: false, reason: null };
 }
 
 function rawHeadersJson(parsed: ParsedMail) {
