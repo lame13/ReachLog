@@ -1,6 +1,17 @@
 import { modules } from "@/modules";
+import { sendTelegramTestAction } from "@/modules/settings/actions";
 
-export default function ModuleSettingsPage() {
+type PageProps = {
+  searchParams?: Promise<{
+    telegramTest?: string;
+    reason?: string;
+  }>;
+};
+
+export default async function ModuleSettingsPage({ searchParams }: PageProps) {
+  const params = await searchParams;
+  const telegramTest = getTelegramTestMessage(params?.telegramTest, params?.reason);
+
   return (
     <>
       <div className="mb-6">
@@ -9,6 +20,18 @@ export default function ModuleSettingsPage() {
           Runtime modules are controlled by environment variables on the server.
         </p>
       </div>
+
+      {telegramTest && (
+        <div
+          className={`mb-4 rounded-lg border px-4 py-3 text-sm ${
+            telegramTest.sent
+              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+              : "border-rose-200 bg-rose-50 text-rose-800"
+          }`}
+        >
+          {telegramTest.message}
+        </div>
+      )}
 
       <section className="rounded-lg border border-line bg-white shadow-sm">
         <div className="overflow-x-auto">
@@ -19,6 +42,7 @@ export default function ModuleSettingsPage() {
                 <th className="px-4 py-3 font-medium">Jobs</th>
                 <th className="px-4 py-3 font-medium">Runtime flag</th>
                 <th className="px-4 py-3 font-medium">State</th>
+                <th className="px-4 py-3 font-medium">Test</th>
               </tr>
             </thead>
             <tbody>
@@ -45,6 +69,17 @@ export default function ModuleSettingsPage() {
                       {module.enabled ? "enabled" : "disabled"}
                     </span>
                   </td>
+                  <td className="px-4 py-3">
+                    {module.key === "telegram" ? (
+                      <form action={sendTelegramTestAction}>
+                        <button className="inline-flex h-9 items-center rounded-md border border-line px-3 text-xs font-medium hover:bg-panel">
+                          Send test
+                        </button>
+                      </form>
+                    ) : (
+                      <span className="text-xs text-muted">none</span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -53,4 +88,19 @@ export default function ModuleSettingsPage() {
       </section>
     </>
   );
+}
+
+function getTelegramTestMessage(status: string | undefined, reason: string | undefined) {
+  if (!status) {
+    return null;
+  }
+
+  if (status === "sent") {
+    return { sent: true, message: "Telegram test sent." };
+  }
+
+  return {
+    sent: false,
+    message: `Telegram test failed: ${reason || "unknown_error"}`
+  };
 }

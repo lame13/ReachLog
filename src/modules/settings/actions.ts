@@ -1,7 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { getSqlite } from "@/modules/core/db/client";
+import { sendTelegramMessage } from "@/modules/telegram/notify";
 
 export async function updateModuleSettingAction(formData: FormData) {
   const key = String(formData.get("key") ?? "");
@@ -16,4 +18,16 @@ export async function updateModuleSettingAction(formData: FormData) {
     .run(enabled, new Date().toISOString(), key);
 
   revalidatePath("/settings/modules");
+}
+
+export async function sendTelegramTestAction() {
+  const result = await sendTelegramMessage(
+    `ReachLog Telegram test\n${new Date().toISOString()}`
+  );
+  const params = new URLSearchParams({
+    telegramTest: result.sent ? "sent" : "failed",
+    reason: result.reason
+  });
+
+  redirect(`/settings/modules?${params.toString()}`);
 }
