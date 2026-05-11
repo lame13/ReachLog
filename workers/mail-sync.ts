@@ -512,6 +512,10 @@ async function insertMessage({
     direction === "inbound" &&
     isDeliveryFailureMessage(parsed, subject, fromEmail);
   const isNotification = nonActionableInbound && !isBounce;
+  const replySnippet =
+    direction === "inbound" && !isBounce && !isNotification
+      ? extractReplySnippet(parsed.text)
+      : "";
 
   const transaction = sqlite.transaction(() => {
     sqlite
@@ -614,6 +618,7 @@ async function insertMessage({
           subject,
           from: fromEmail,
           to: toEmail,
+          replySnippet: replySnippet || undefined,
           bounced: isBounce,
           nonActionable: isNotification,
           reason: nonActionableReason
@@ -627,10 +632,107 @@ async function insertMessage({
   const state = transaction();
 
   if (direction === "inbound" && state.latestIsInbound && !isBounce && !isNotification) {
-    await sendTelegramMessage(
-      `Reply received: ${fromEmail}\n${subject}\n${targetUrl(thread.targetId)}`
-    );
+    await sendTelegramMessage(formatReplyTelegramMessage({
+      fromEmail,
+      subject,
+      replySnippet,
+      targetId: thread.targetId
+    }));
   }
+}
+
+function formatReplyTelegramMessage({
+  fromEmail,
+  subject,
+  replySnippet,
+  targetId
+}: {
+  fromEmail: string;
+  subject: string;
+  replySnippet: string;
+  targetId: string;
+}) {
+  return [
+    `Reply received: ${fromEmail}`,
+    subject,
+    replySnippet ? `\n${replySnippet}` : "",
+    targetUrl(targetId)
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function extractReplySnippet(text: string | undefined) {
+  if (!text) {
+    return "";
+  }
+
+  const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+  const replyLines: string[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    if (isQuotedReplyBoundary(trimmed, replyLines.length > 0)) {
+      break;
+    }
+
+    if (trimmed.startsWith(">")) {
+      continue;
+    }
+
+    replyLines.push(line);
+  }
+
+  return trimSnippet(
+    replyLines
+      .join("\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim()
+  );
+}
+
+function isQuotedReplyBoundary(line: string, hasReplyText: boolean) {
+  if (!line) {
+    return false;
+  }
+
+  if (/^--\s*$/.test(line)) {
+    return true;
+  }
+
+  if (/^sent from my /i.test(line)) {
+    return true;
+  }
+
+  if (/^-{2,}\s*original message\s*-{2,}$/i.test(line)) {
+    return true;
+  }
+
+  if (/^on .+wrote:$/i.test(line)) {
+    return true;
+  }
+
+  if (/^_{5,}$/.test(line) || /^-{5,}$/.test(line)) {
+    return true;
+  }
+
+  return hasReplyText && /^(from|sent|to|subject):\s.+/i.test(line);
+}
+
+function trimSnippet(text: string) {
+  const normalized = text
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .join("\n")
+    .trim();
+  const maxLength = 1200;
+
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, maxLength - 3).trimEnd()}...`;
 }
 
 function updateThreadAfterMessage({
