@@ -2,6 +2,7 @@ import { env } from "../src/modules/core/env";
 import { getSqlite } from "../src/modules/core/db/client";
 import { withWorkerLock } from "../src/modules/core/db/locks";
 import { createId } from "../src/modules/core/ids";
+import { targetUrl } from "../src/modules/core/urls";
 import { notifyWorkerFailure } from "../src/modules/core/worker-alerts";
 import { sendTelegramMessage } from "../src/modules/telegram/notify";
 
@@ -48,7 +49,7 @@ async function checkFollowups() {
   }
 
   for (const followup of dueFollowups) {
-    const text = `Follow-up due: ${followup.company_name} (${followup.contact_email ?? "form only"})`;
+    const text = `Follow-up due: ${followup.company_name} (${followup.contact_email ?? "form only"})\n${targetUrl(followup.target_id)}`;
     const result = await sendTelegramMessage(text);
 
     if (result.sent) {

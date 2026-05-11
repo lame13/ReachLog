@@ -4,6 +4,7 @@ import { env } from "../src/modules/core/env";
 import { getSqlite } from "../src/modules/core/db/client";
 import { withWorkerLock } from "../src/modules/core/db/locks";
 import { createId } from "../src/modules/core/ids";
+import { targetUrl } from "../src/modules/core/urls";
 import { notifyWorkerFailure } from "../src/modules/core/worker-alerts";
 import {
   extractThreadHeaderCandidates,
@@ -624,7 +625,9 @@ async function insertMessage({
   const state = transaction();
 
   if (direction === "inbound" && state.latestIsInbound && !isBounce && !isNotification) {
-    await sendTelegramMessage(`Reply received: ${fromEmail}\n${subject}`);
+    await sendTelegramMessage(
+      `Reply received: ${fromEmail}\n${subject}\n${targetUrl(thread.targetId)}`
+    );
   }
 }
 

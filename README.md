@@ -41,6 +41,7 @@ The app creates a local SQLite database automatically at:
 For production, set:
 
 ```text
+APP_URL=https://reachlog-pzjckw1w.on-forge.com
 DATABASE_PATH=/home/reach-log/reachlog-pzjckw1w.on-forge.com/shared/data/app.sqlite
 BACKUP_DIR=/home/reach-log/reachlog-pzjckw1w.on-forge.com/shared/data/backups
 ```

@@ -23,6 +23,7 @@ Use absolute production paths:
 
 ```text
 TZ=Asia/Bangkok
+APP_URL=https://reachlog-pzjckw1w.on-forge.com
 DATABASE_PATH=/home/reach-log/reachlog-pzjckw1w.on-forge.com/shared/data/app.sqlite
 BACKUP_DIR=/home/reach-log/reachlog-pzjckw1w.on-forge.com/shared/data/backups
 B2_REMOTE=b2:your-bucket/outreach-crm/
@@ -133,6 +134,7 @@ In Forge's environment editor for the site, set:
 NODE_ENV=production
 TZ=Asia/Bangkok
 PORT=3007
+APP_URL=https://reachlog-pzjckw1w.on-forge.com
 DATABASE_PATH=/home/reach-log/reachlog-pzjckw1w.on-forge.com/shared/data/app.sqlite
 BACKUP_DIR=/home/reach-log/reachlog-pzjckw1w.on-forge.com/shared/data/backups
 B2_REMOTE=b2:your-bucket/outreach-crm/

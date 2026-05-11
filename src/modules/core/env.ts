@@ -12,6 +12,9 @@ const defaultDatabasePath = usesForgeDefaults
 const defaultBackupDir = usesForgeDefaults
   ? `${forgeAppRoot}/shared/data/backups`
   : ".data/backups";
+const defaultAppUrl = usesForgeDefaults
+  ? "https://reachlog-pzjckw1w.on-forge.com"
+  : "http://localhost:3000";
 
 const booleanFromString = z
   .string()
@@ -27,6 +30,7 @@ const portFromString = (fallback: number) =>
 
 const EnvSchema = z.object({
   TZ: z.string().default("Asia/Bangkok"),
+  APP_URL: z.string().default(defaultAppUrl),
   DATABASE_PATH: z.string().default(defaultDatabasePath),
   SEED_DEMO_DATA: booleanFromString,
 

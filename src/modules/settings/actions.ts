@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSqlite } from "@/modules/core/db/client";
+import { appUrl } from "@/modules/core/urls";
 import { sendTelegramMessage } from "@/modules/telegram/notify";
 
 export async function updateModuleSettingAction(formData: FormData) {
@@ -22,7 +23,7 @@ export async function updateModuleSettingAction(formData: FormData) {
 
 export async function sendTelegramTestAction() {
   const result = await sendTelegramMessage(
-    `ReachLog Telegram test\n${new Date().toISOString()}`
+    `ReachLog Telegram test\n${new Date().toISOString()}\n${appUrl("/dashboard")}`
   );
   const params = new URLSearchParams({
     telegramTest: result.sent ? "sent" : "failed",
