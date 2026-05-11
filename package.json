@@ -12,6 +12,7 @@
     "db:generate": "drizzle-kit generate",
     "prod:check": "tsx scripts/prod/check.ts",
     "prod:backfill-source-timestamps": "tsx scripts/prod/backfill-source-timestamps.ts",
+    "prod:backfill-mail-event-timestamps": "tsx scripts/prod/backfill-mail-event-timestamps.ts",
     "worker:mail-sync": "tsx workers/mail-sync.ts",
     "worker:list-mailboxes": "tsx workers/list-mailboxes.ts",
     "worker:email-verify": "tsx workers/email-verify.ts",

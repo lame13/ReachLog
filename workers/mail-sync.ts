@@ -609,6 +609,8 @@ async function insertMessage({
         JSON.stringify({
           mailbox,
           messageId,
+          messageDate,
+          syncedAt: now,
           subject,
           from: fromEmail,
           to: toEmail,
@@ -616,7 +618,7 @@ async function insertMessage({
           nonActionable: isNotification,
           reason: nonActionableReason
         }),
-        now
+        messageDate
       );
 
     return state;
