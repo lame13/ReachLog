@@ -7,7 +7,11 @@ import { env } from "@/modules/core/env";
 import { getSqlite } from "@/modules/core/db/client";
 import { createId } from "@/modules/core/ids";
 import { normalizeSubject } from "@/modules/mailbox/threading";
-import { isSendBlockedStatus } from "@/modules/outreach/status";
+import {
+  isNonActionablePlatformTarget,
+  isSendBlockedStatus,
+  isTargetActionBlocked
+} from "@/modules/outreach/status";
 import { isEmailVerificationBlocking } from "@/modules/emailVerification/service";
 
 export async function saveDraftAction(formData: FormData) {
@@ -40,14 +44,15 @@ export async function sendNowAction(formData: FormData) {
   const target = getSendableTarget(targetId);
 
   const blockedStatus = isSendBlockedStatus(target?.status);
+  const blockedPlatform = target ? isNonActionablePlatformTarget(target) : false;
+  const blockedTarget = target ? isTargetActionBlocked(target) : false;
   const blockedEmailVerification = isEmailVerificationBlocking(
     target?.emailVerificationStatus
   );
 
   if (
     !target?.contactEmail ||
-    target.doNotResend ||
-    blockedStatus ||
+    blockedTarget ||
     blockedEmailVerification
   ) {
     createTargetEvent(targetId, "send_blocked", {
@@ -55,9 +60,11 @@ export async function sendNowAction(formData: FormData) {
         ? "do_not_resend"
         : blockedStatus
           ? "blocked_status"
-          : blockedEmailVerification
-            ? "email_verification_blocked"
-            : "missing_contact_email",
+          : blockedPlatform
+            ? "non_actionable_platform"
+            : blockedEmailVerification
+              ? "email_verification_blocked"
+              : "missing_contact_email",
       status: target?.status,
       emailVerificationStatus: target?.emailVerificationStatus,
       subject
@@ -180,6 +187,9 @@ type SendableTarget = {
   contactId: string | null;
   contactEmail: string | null;
   companyName: string;
+  dedupeKey: string;
+  sourceType: string;
+  sourceUrl: string | null;
   status: string;
   doNotResend: number;
   emailVerificationStatus: string | null;
@@ -197,6 +207,9 @@ function getSendableTarget(targetId: string) {
         targets.id,
         targets.contact_id as contactId,
         targets.company_name as companyName,
+        targets.dedupe_key as dedupeKey,
+        targets.source_type as sourceType,
+        targets.source_url as sourceUrl,
         targets.status,
         targets.do_not_resend as doNotResend,
         contacts.email as contactEmail,

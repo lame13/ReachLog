@@ -9,3 +9,43 @@ export function isSendBlockedStatus(status: string | null | undefined) {
     normalized.includes("do not send")
   );
 }
+
+export function isNonActionablePlatformTarget(target: {
+  companyName?: string | null;
+  dedupeKey?: string | null;
+  sourceType?: string | null;
+  sourceUrl?: string | null;
+}) {
+  const values = [
+    target.dedupeKey,
+    target.sourceType,
+    target.sourceUrl,
+    target.companyName
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return (
+    values.includes("platform:contra") ||
+    values.includes("platform:codementor") ||
+    (target.sourceType?.toLowerCase() === "platform" &&
+      (target.companyName?.toLowerCase().includes("contra") ||
+        target.companyName?.toLowerCase().includes("codementor")))
+  );
+}
+
+export function isTargetActionBlocked(target: {
+  companyName?: string | null;
+  dedupeKey?: string | null;
+  doNotResend?: boolean | number | null;
+  sourceType?: string | null;
+  sourceUrl?: string | null;
+  status?: string | null;
+}) {
+  return (
+    Boolean(target.doNotResend) ||
+    isSendBlockedStatus(target.status) ||
+    isNonActionablePlatformTarget(target)
+  );
+}

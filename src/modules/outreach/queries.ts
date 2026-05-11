@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, lte, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { getDb, getSqlite } from "@/modules/core/db/client";
 import {
   contactFormSubmissions,
@@ -11,6 +11,7 @@ import {
   threads
 } from "@/modules/core/db/schema";
 import { endOfTodayIso, startOfTodayIso } from "@/modules/core/dates";
+import { isTargetActionBlocked } from "@/modules/outreach/status";
 
 export type TargetListItem = Awaited<ReturnType<typeof getTargets>>[number];
 export type FollowupListItem = Awaited<ReturnType<typeof getFollowups>>[number];
@@ -52,41 +53,33 @@ export type TargetListRow = {
 export function getDashboardData() {
   const db = getDb();
   const sqlite = getSqlite();
-  const todayEnd = endOfTodayIso();
+  const dueFollowups = getFollowups("due");
+  const overdueFollowups = getFollowups("overdue");
 
   const replyCount = sqlite
     .prepare(
       `
       SELECT COUNT(*) as count
       FROM threads
+      INNER JOIN targets ON targets.id = threads.target_id
       WHERE threads.status = 'replied'
+        AND ${actionableTargetSql("targets")}
         AND NOT (${latestNonActionableMessageSql("threads.id")})
     `
     )
     .get() as { count: number };
 
-  const [followupDueCount] = db
-    .select({ count: sql<number>`count(*)` })
-    .from(followupTasks)
-    .where(and(eq(followupTasks.status, "open"), lte(followupTasks.dueAt, todayEnd)))
-    .all();
-
-  const [overdueCount] = db
-    .select({ count: sql<number>`count(*)` })
-    .from(followupTasks)
-    .where(
-      and(
-        eq(followupTasks.status, "open"),
-        lte(followupTasks.dueAt, startOfTodayIso())
-      )
+  const sentNoReplyCount = sqlite
+    .prepare(
+      `
+      SELECT COUNT(*) as count
+      FROM threads
+      INNER JOIN targets ON targets.id = threads.target_id
+      WHERE threads.status = 'waiting'
+        AND ${actionableTargetSql("targets")}
+    `
     )
-    .all();
-
-  const [sentNoReplyCount] = db
-    .select({ count: sql<number>`count(*)` })
-    .from(threads)
-    .where(eq(threads.status, "waiting"))
-    .all();
+    .get() as { count: number };
 
   const replies = sqlite
     .prepare(
@@ -103,6 +96,7 @@ export function getDashboardData() {
       INNER JOIN targets ON targets.id = threads.target_id
       LEFT JOIN contacts ON contacts.id = threads.contact_id
       WHERE threads.status = 'replied'
+        AND ${actionableTargetSql("targets")}
         AND NOT (${latestNonActionableMessageSql("threads.id")})
       ORDER BY threads.last_inbound_at DESC
       LIMIT 5
@@ -118,7 +112,7 @@ export function getDashboardData() {
     status: string;
   }>;
 
-  const followups = getFollowups("due").slice(0, 5);
+  const followups = dueFollowups.slice(0, 5);
 
   const recentMessages = db
     .select({
@@ -178,8 +172,8 @@ export function getDashboardData() {
   return {
     stats: {
       repliesNeedingAction: replyCount.count,
-      followupsDue: followupDueCount?.count ?? 0,
-      overdueFollowups: overdueCount?.count ?? 0,
+      followupsDue: dueFollowups.length,
+      overdueFollowups: overdueFollowups.length,
       sentNoReply: sentNoReplyCount?.count ?? 0,
       failedSends: failedSendCount?.count ?? 0
     },
@@ -420,6 +414,31 @@ function latestNonActionableMessageSql(threadIdExpression: string) {
   `;
 }
 
+function actionableTargetSql(targetAlias: string) {
+  const status = `lower(COALESCE(${targetAlias}.status, ''))`;
+  const dedupeKey = `lower(COALESCE(${targetAlias}.dedupe_key, ''))`;
+  const sourceType = `lower(COALESCE(${targetAlias}.source_type, ''))`;
+  const sourceUrl = `lower(COALESCE(${targetAlias}.source_url, ''))`;
+  const companyName = `lower(COALESCE(${targetAlias}.company_name, ''))`;
+
+  return `
+    COALESCE(${targetAlias}.do_not_resend, 0) = 0
+    AND ${status} NOT LIKE '%dead%'
+    AND ${status} NOT LIKE '%bounced%'
+    AND ${status} NOT LIKE '%skipped%'
+    AND ${status} NOT LIKE '%blocked%'
+    AND ${status} NOT LIKE '%do not send%'
+    AND ${dedupeKey} NOT LIKE '%platform:contra%'
+    AND ${dedupeKey} NOT LIKE '%platform:codementor%'
+    AND ${sourceUrl} NOT LIKE '%platform:contra%'
+    AND ${sourceUrl} NOT LIKE '%platform:codementor%'
+    AND NOT (
+      ${sourceType} = 'platform'
+      AND (${companyName} LIKE '%contra%' OR ${companyName} LIKE '%codementor%')
+    )
+  `;
+}
+
 export function getFollowups(filter: "due" | "overdue" | "upcoming" | "all" = "all") {
   const db = getDb();
   const now = new Date().toISOString();
@@ -432,6 +451,9 @@ export function getFollowups(filter: "due" | "overdue" | "upcoming" | "all" = "a
       targetId: targets.id,
       threadId: followupTasks.threadId,
       companyName: targets.companyName,
+      dedupeKey: targets.dedupeKey,
+      sourceType: targets.sourceType,
+      sourceUrl: targets.sourceUrl,
       contactEmail: contacts.email,
       emailVerificationStatus: contacts.emailVerificationStatus,
       domain: contacts.domain,
@@ -452,7 +474,8 @@ export function getFollowups(filter: "due" | "overdue" | "upcoming" | "all" = "a
     .leftJoin(threads, eq(followupTasks.threadId, threads.id))
     .where(eq(followupTasks.status, "open"))
     .orderBy(followupTasks.dueAt)
-    .all();
+    .all()
+    .filter((row) => !isTargetActionBlocked(row));
 
   if (filter === "due") {
     return rows.filter((row) => row.dueAt <= todayEnd);
@@ -813,7 +836,10 @@ export function getSendTarget(targetId: string | undefined) {
       .select({
         id: targets.id,
         companyName: targets.companyName,
+        dedupeKey: targets.dedupeKey,
         doNotResend: targets.doNotResend,
+        sourceType: targets.sourceType,
+        sourceUrl: targets.sourceUrl,
         status: targets.status,
         contactEmail: contacts.email,
         emailVerificationStatus: contacts.emailVerificationStatus,

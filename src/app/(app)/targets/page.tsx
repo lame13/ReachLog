@@ -10,6 +10,8 @@ import {
   getTargetFilterOptions,
   getTargets
 } from "@/modules/outreach/queries";
+import { isEmailVerificationBlocking } from "@/modules/emailVerification/service";
+import { isTargetActionBlocked } from "@/modules/outreach/status";
 
 type PageProps = {
   searchParams?: Promise<{
@@ -174,7 +176,13 @@ export default async function TargetsPage({ searchParams }: PageProps) {
             </thead>
             <tbody>
               {targets.length ? (
-                targets.map((target) => (
+                targets.map((target) => {
+                  const canSend =
+                    Boolean(target.contactEmail) &&
+                    !isTargetActionBlocked(target) &&
+                    !isEmailVerificationBlocking(target.emailVerificationStatus);
+
+                  return (
                   <tr key={target.id} className="border-t border-line align-top">
                     <td className="px-4 py-3">
                       <Link className="font-medium" href={`/targets/${target.id}`}>
@@ -204,16 +212,24 @@ export default async function TargetsPage({ searchParams }: PageProps) {
                       <StatusPill status={target.status} />
                     </td>
                     <td className="px-4 py-3">
-                      <Link
-                        className="inline-flex h-9 items-center gap-2 rounded-md bg-ink px-3 text-xs font-medium text-white"
-                        href={targetsHref({ ...listParams, sendTargetId: target.id })}
-                      >
-                        <Send className="size-3.5" aria-hidden="true" />
-                        Send
-                      </Link>
+                      {canSend ? (
+                        <Link
+                          className="inline-flex h-9 items-center gap-2 rounded-md bg-ink px-3 text-xs font-medium text-white"
+                          href={targetsHref({ ...listParams, sendTargetId: target.id })}
+                        >
+                          <Send className="size-3.5" aria-hidden="true" />
+                          Send
+                        </Link>
+                      ) : (
+                        <span className="inline-flex h-9 items-center gap-2 rounded-md bg-gray-200 px-3 text-xs font-medium text-muted">
+                          <Send className="size-3.5" aria-hidden="true" />
+                          Send
+                        </span>
+                      )}
                     </td>
                   </tr>
-                ))
+                  );
+                })
               ) : (
                 <tr className="border-t border-line">
                   <td className="px-4 py-10 text-center text-muted" colSpan={7}>

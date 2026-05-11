@@ -3,13 +3,16 @@ import { Save, Send, X } from "lucide-react";
 import { saveDraftAction, sendNowAction } from "@/modules/smtp/actions";
 import { formatDateTime } from "@/modules/core/dates";
 import { createId } from "@/modules/core/ids";
-import { isSendBlockedStatus } from "@/modules/outreach/status";
+import { isTargetActionBlocked } from "@/modules/outreach/status";
 import { isEmailVerificationBlocking } from "@/modules/emailVerification/service";
 
 type SendTarget = {
   id: string;
   companyName: string;
+  dedupeKey: string;
   doNotResend: boolean;
+  sourceType: string;
+  sourceUrl: string | null;
   contactEmail: string | null;
   emailVerificationStatus: string | null;
   emailVerificationCheckedAt: string | null;
@@ -36,14 +39,12 @@ export function SendEmailModal({
       ? target.subject
       : `Re: ${target.subject}`
     : `Quick question about ${target.companyName}`;
-  const blockedStatus = isSendBlockedStatus(target.status);
   const blockedEmailVerification = isEmailVerificationBlocking(
     target.emailVerificationStatus
   );
   const canSend =
     Boolean(target.contactEmail) &&
-    !target.doNotResend &&
-    !blockedStatus &&
+    !isTargetActionBlocked(target) &&
     !blockedEmailVerification;
   const sendKey = createId("sendkey");
 
