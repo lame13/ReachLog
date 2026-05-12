@@ -20,6 +20,7 @@ type SendTarget = {
   contactName: string | null;
   status: string;
   lastOutboundAt: string | null;
+  lastOutboundBody: string | null;
   subject: string | null;
 };
 
@@ -91,7 +92,7 @@ export function SendEmailModal({
             <textarea
               className="min-h-48 w-full resize-y rounded-md border border-line px-3 py-2 text-sm outline-none focus:border-accent"
               name="body"
-              defaultValue="Hi, just wanted to follow up on this."
+              defaultValue={target.lastOutboundBody ?? ""}
             />
           </label>
 
@@ -127,7 +128,7 @@ export function SendEmailModal({
                 min={1}
                 name="followupDays"
                 type="number"
-                defaultValue={3}
+                defaultValue={5}
               />
             </label>
           </div>

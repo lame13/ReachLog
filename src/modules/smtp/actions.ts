@@ -35,7 +35,7 @@ export async function sendNowAction(formData: FormData) {
     String(formData.get("sendKey") ?? "").trim() || createId("sendkey");
   const returnTo = getSafeReturnTo(String(formData.get("returnTo") ?? ""));
   const createFollowup = formData.get("createFollowup") === "on";
-  const followupDays = Math.max(1, Number(formData.get("followupDays") ?? 3));
+  const followupDays = Math.max(1, Number(formData.get("followupDays") ?? 5));
 
   if (!targetId || !subject || !body) {
     return;
@@ -384,7 +384,7 @@ function persistSentEmail({
           target.id,
           dueAt.toISOString(),
           subject.startsWith("Re:") ? subject : `Re: ${subject}`,
-          "Hi, just wanted to follow up on this.",
+          body,
           now
         );
     }

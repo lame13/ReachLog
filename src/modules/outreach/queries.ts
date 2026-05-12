@@ -830,31 +830,62 @@ export function getSendTarget(targetId: string | undefined) {
     return null;
   }
 
-  const db = getDb();
-  return (
-    db
-      .select({
-        id: targets.id,
-        companyName: targets.companyName,
-        dedupeKey: targets.dedupeKey,
-        doNotResend: targets.doNotResend,
-        sourceType: targets.sourceType,
-        sourceUrl: targets.sourceUrl,
-        status: targets.status,
-        contactEmail: contacts.email,
-        emailVerificationStatus: contacts.emailVerificationStatus,
-        emailVerificationCheckedAt: contacts.emailVerificationCheckedAt,
-        emailVerificationError: contacts.emailVerificationError,
-        contactName: contacts.name,
-        lastOutboundAt: threads.lastOutboundAt,
-        subject: threads.subject
-      })
-      .from(targets)
-      .leftJoin(contacts, eq(targets.contactId, contacts.id))
-      .leftJoin(threads, eq(targets.id, threads.targetId))
-      .where(eq(targets.id, targetId))
-      .orderBy(desc(threads.updatedAt))
-      .limit(1)
-      .get() ?? null
-  );
+  const row = getSqlite()
+    .prepare(
+      `
+      SELECT
+        targets.id,
+        targets.company_name as companyName,
+        targets.dedupe_key as dedupeKey,
+        targets.do_not_resend as doNotResend,
+        targets.source_type as sourceType,
+        targets.source_url as sourceUrl,
+        targets.status,
+        contacts.email as contactEmail,
+        contacts.email_verification_status as emailVerificationStatus,
+        contacts.email_verification_checked_at as emailVerificationCheckedAt,
+        contacts.email_verification_error as emailVerificationError,
+        contacts.name as contactName,
+        threads.last_outbound_at as lastOutboundAt,
+        threads.subject,
+        (
+          SELECT messages.body_text
+          FROM messages
+          INNER JOIN threads message_threads ON message_threads.id = messages.thread_id
+          WHERE message_threads.target_id = targets.id
+            AND messages.direction = 'outbound'
+            AND messages.body_text IS NOT NULL
+            AND trim(messages.body_text) != ''
+          ORDER BY COALESCE(messages.sent_at, messages.created_at) DESC
+          LIMIT 1
+        ) as lastOutboundBody
+      FROM targets
+      LEFT JOIN contacts ON contacts.id = targets.contact_id
+      LEFT JOIN threads ON threads.target_id = targets.id
+      WHERE targets.id = ?
+      ORDER BY threads.updated_at DESC
+      LIMIT 1
+    `
+    )
+    .get(targetId) as
+    | {
+        id: string;
+        companyName: string;
+        dedupeKey: string;
+        doNotResend: number;
+        sourceType: string;
+        sourceUrl: string | null;
+        status: string;
+        contactEmail: string | null;
+        emailVerificationStatus: string | null;
+        emailVerificationCheckedAt: string | null;
+        emailVerificationError: string | null;
+        contactName: string | null;
+        lastOutboundAt: string | null;
+        subject: string | null;
+        lastOutboundBody: string | null;
+      }
+    | undefined;
+
+  return row ? { ...row, doNotResend: Boolean(row.doNotResend) } : null;
 }
