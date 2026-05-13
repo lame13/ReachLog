@@ -151,6 +151,7 @@ SMTP_SECURE=false
 SMTP_USER=
 SMTP_PASS=
 SMTP_FROM=
+SMTP_FROM_IDENTITIES=
 
 IMAP_ENABLED=false
 IMAP_HOST=127.0.0.1
@@ -176,6 +177,20 @@ EMAILLISTVERIFY_BATCH_SIZE=25
 Bridge on localhost, start with `starttls` and `IMAP_TLS_VERIFY=false`. The old
 `IMAP_SECURE=true|false` variable is still accepted as a fallback, but
 `IMAP_SECURITY` takes precedence when set.
+
+For multiple Proton sender addresses, keep `SMTP_USER` and `SMTP_PASS` as the
+shared Bridge credentials and add `SMTP_FROM_IDENTITIES`:
+
+```text
+SMTP_FROM_IDENTITIES=Niko <niko@wpfixpath.work>|Niko <niko@indexlane.dev>
+```
+
+If a sender ever needs separate SMTP credentials, use the optional override form
+for that identity:
+
+```text
+SMTP_FROM_IDENTITIES=Niko <niko@wpfixpath.work>::bridge-user-1::bridge-pass-1|Niko <niko@indexlane.dev>::bridge-user-2::bridge-pass-2
+```
 
 Turn `SMTP_ENABLED` and `IMAP_ENABLED` on only after Proton Bridge is installed
 and tested on the VDS.

@@ -185,6 +185,20 @@ SMTP_PORT=1025
 
 Exact ports depend on your Bridge configuration.
 
+For two sender addresses that share the same Bridge login/password:
+
+```text
+SMTP_USER=your-bridge-user
+SMTP_PASS=your-bridge-password
+SMTP_FROM_IDENTITIES=Niko <niko@wpfixpath.work>|Niko <niko@indexlane.dev>
+```
+
+If an address needs separate SMTP credentials, an identity can override them:
+
+```text
+SMTP_FROM_IDENTITIES=Niko <niko@wpfixpath.work>::bridge-user-1::bridge-pass-1|Niko <niko@indexlane.dev>::bridge-user-2::bridge-pass-2
+```
+
 List Bridge mailbox names before enabling sync:
 
 ```bash

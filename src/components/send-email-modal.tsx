@@ -5,6 +5,7 @@ import { formatDateTime } from "@/modules/core/dates";
 import { createId } from "@/modules/core/ids";
 import { isTargetActionBlocked } from "@/modules/outreach/status";
 import { isEmailVerificationBlocking } from "@/modules/emailVerification/service";
+import { getSmtpFromOptions } from "@/modules/smtp/from-identities";
 
 type SendTarget = {
   id: string;
@@ -47,6 +48,7 @@ export function SendEmailModal({
     Boolean(target.contactEmail) &&
     !isTargetActionBlocked(target) &&
     !blockedEmailVerification;
+  const fromOptions = getSmtpFromOptions();
   const sendKey = createId("sendkey");
 
   return (
@@ -70,6 +72,31 @@ export function SendEmailModal({
           <input type="hidden" name="targetId" value={target.id} />
           <input type="hidden" name="sendKey" value={sendKey} />
           <input type="hidden" name="returnTo" value={closeHref} />
+          <label className="block">
+            <span className="mb-1 block text-sm font-medium">From</span>
+            {fromOptions.length > 1 ? (
+              <select
+                className="h-10 w-full rounded-md border border-line bg-white px-3 text-sm outline-none focus:border-accent"
+                name="fromEmail"
+                defaultValue={fromOptions[0].value}
+              >
+                {fromOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <>
+                <input name="fromEmail" type="hidden" value={fromOptions[0].value} />
+                <input
+                  className="h-10 w-full rounded-md border border-line px-3 text-sm outline-none focus:border-accent"
+                  readOnly
+                  value={fromOptions[0].label}
+                />
+              </>
+            )}
+          </label>
           <label className="block">
             <span className="mb-1 block text-sm font-medium">To</span>
             <input

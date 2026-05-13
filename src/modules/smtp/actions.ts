@@ -13,6 +13,10 @@ import {
   isTargetActionBlocked
 } from "@/modules/outreach/status";
 import { isEmailVerificationBlocking } from "@/modules/emailVerification/service";
+import {
+  getMessageIdDomain,
+  selectSmtpIdentity
+} from "@/modules/smtp/from-identities";
 
 export async function saveDraftAction(formData: FormData) {
   const targetId = String(formData.get("targetId") ?? "");
@@ -31,6 +35,8 @@ export async function sendNowAction(formData: FormData) {
   const targetId = String(formData.get("targetId") ?? "");
   const subject = String(formData.get("subject") ?? "");
   const body = String(formData.get("body") ?? "");
+  const fromIdentity = selectSmtpIdentity(String(formData.get("fromEmail") ?? ""));
+  const fromEmail = fromIdentity.from;
   const sendKey =
     String(formData.get("sendKey") ?? "").trim() || createId("sendkey");
   const returnTo = getSafeReturnTo(String(formData.get("returnTo") ?? ""));
@@ -74,7 +80,7 @@ export async function sendNowAction(formData: FormData) {
   }
 
   const contactEmail = target.contactEmail;
-  const messageId = createLocalMessageId();
+  const messageId = createLocalMessageId(fromEmail);
   const replyToMessageId = target.lastMessageId ?? target.firstMessageId ?? undefined;
 
   if (!env.SMTP_ENABLED) {
@@ -91,6 +97,7 @@ export async function sendNowAction(formData: FormData) {
     contactEmail,
     subject,
     body,
+    fromEmail,
     messageId,
     sendKey
   });
@@ -110,10 +117,10 @@ export async function sendNowAction(formData: FormData) {
     port: env.SMTP_PORT,
     secure: env.SMTP_SECURE,
     auth:
-      env.SMTP_USER && env.SMTP_PASS
+      fromIdentity.smtpUser && fromIdentity.smtpPass
         ? {
-            user: env.SMTP_USER,
-            pass: env.SMTP_PASS
+            user: fromIdentity.smtpUser,
+            pass: fromIdentity.smtpPass
           }
         : undefined
   });
@@ -122,7 +129,7 @@ export async function sendNowAction(formData: FormData) {
 
   try {
     result = await transporter.sendMail({
-      from: getFromEmail(),
+      from: fromEmail,
       to: target.contactEmail,
       subject,
       text: body,
@@ -149,6 +156,7 @@ export async function sendNowAction(formData: FormData) {
       target: { ...target, contactEmail },
       subject,
       body,
+      fromEmail,
       messageId,
       replyToMessageId,
       outboundSendId: outboundSendId.id,
@@ -233,6 +241,7 @@ function persistSentEmail({
   target,
   subject,
   body,
+  fromEmail,
   messageId,
   replyToMessageId,
   outboundSendId,
@@ -243,6 +252,7 @@ function persistSentEmail({
   target: SendableTarget & { contactEmail: string };
   subject: string;
   body: string;
+  fromEmail: string;
   messageId: string;
   replyToMessageId: string | undefined;
   outboundSendId: string;
@@ -319,7 +329,7 @@ function persistSentEmail({
       .run(
         createId("message"),
         threadId,
-        getFromEmail(),
+        fromEmail,
         target.contactEmail,
         subject,
         body,
@@ -390,6 +400,7 @@ function persistSentEmail({
     }
 
     createTargetEvent(target.id, "email_sent", {
+      from: fromEmail,
       messageId,
       subject
     });
@@ -417,6 +428,7 @@ function createPendingOutboundSend({
   contactEmail,
   subject,
   body,
+  fromEmail,
   messageId,
   sendKey
 }: {
@@ -424,6 +436,7 @@ function createPendingOutboundSend({
   contactEmail: string;
   subject: string;
   body: string;
+  fromEmail: string;
   messageId: string;
   sendKey: string;
 }) {
@@ -468,6 +481,7 @@ function createPendingOutboundSend({
 
   createTargetEvent(target.id, "send_queued", {
     outboundSendId,
+    from: fromEmail,
     messageId,
     sendKey,
     subject
@@ -520,12 +534,8 @@ function getSafeReturnTo(value: string) {
   return value;
 }
 
-function getFromEmail() {
-  return env.SMTP_FROM || env.SMTP_USER || "me@example.local";
-}
-
-function createLocalMessageId() {
-  const domain = getFromEmail().split("@")[1] || "reachlog.local";
+function createLocalMessageId(fromEmail: string) {
+  const domain = getMessageIdDomain(fromEmail);
   return `<${createId("message")}@${domain}>`;
 }
 

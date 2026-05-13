@@ -45,6 +45,7 @@ const EnvSchema = z.object({
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
   SMTP_FROM: z.string().optional(),
+  SMTP_FROM_IDENTITIES: z.string().optional(),
 
   IMAP_ENABLED: booleanFromString,
   IMAP_HOST: z.string().default("127.0.0.1"),
