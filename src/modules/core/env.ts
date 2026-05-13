@@ -42,6 +42,7 @@ const EnvSchema = z.object({
   SMTP_HOST: z.string().default("127.0.0.1"),
   SMTP_PORT: portFromString(1025),
   SMTP_SECURE: booleanFromString,
+  SMTP_TLS_VERIFY: booleanFromString.default("true"),
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
   SMTP_FROM: z.string().optional(),

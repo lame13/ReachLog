@@ -148,6 +148,7 @@ SMTP_ENABLED=false
 SMTP_HOST=127.0.0.1
 SMTP_PORT=1025
 SMTP_SECURE=false
+SMTP_TLS_VERIFY=false
 SMTP_USER=
 SMTP_PASS=
 SMTP_FROM=
@@ -177,6 +178,11 @@ EMAILLISTVERIFY_BATCH_SIZE=25
 Bridge on localhost, start with `starttls` and `IMAP_TLS_VERIFY=false`. The old
 `IMAP_SECURE=true|false` variable is still accepted as a fallback, but
 `IMAP_SECURITY` takes precedence when set.
+
+For Proton Bridge SMTP on localhost, keep `SMTP_SECURE=false` and set
+`SMTP_TLS_VERIFY=false`. Nodemailer may still upgrade the connection with
+STARTTLS when Bridge advertises it; this disables certificate verification for
+Bridge's local self-signed certificate.
 
 For multiple Proton sender addresses, keep `SMTP_USER` and `SMTP_PASS` as the
 shared Bridge credentials and add `SMTP_FROM_IDENTITIES`:

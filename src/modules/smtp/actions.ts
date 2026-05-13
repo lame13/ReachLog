@@ -143,6 +143,9 @@ export async function sendNowAction(formData: FormData) {
     host: env.SMTP_HOST,
     port: env.SMTP_PORT,
     secure: env.SMTP_SECURE,
+    tls: {
+      rejectUnauthorized: env.SMTP_TLS_VERIFY
+    },
     auth:
       fromIdentity.smtpUser && fromIdentity.smtpPass
         ? {

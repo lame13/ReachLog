@@ -181,6 +181,7 @@ IMAP_SECURITY=starttls
 IMAP_TLS_VERIFY=false
 SMTP_HOST=127.0.0.1
 SMTP_PORT=1025
+SMTP_TLS_VERIFY=false
 ```
 
 Exact ports depend on your Bridge configuration.
