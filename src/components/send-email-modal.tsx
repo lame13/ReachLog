@@ -52,8 +52,9 @@ export function SendEmailModal({
   const sendKey = createId("sendkey");
 
   return (
-    <div className="fixed inset-0 z-40 grid place-items-center bg-black/40 px-4">
-      <div className="w-full max-w-2xl rounded-lg border border-line bg-white shadow-soft">
+    <div className="fixed inset-0 z-40 overflow-y-auto bg-black/40 px-4 py-6">
+      <div className="mx-auto flex min-h-full w-full max-w-2xl items-center">
+        <div className="my-auto max-h-[calc(100vh-3rem)] w-full overflow-hidden rounded-lg border border-line bg-white shadow-soft">
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
           <div>
             <h2 className="text-lg font-semibold">Send Email</h2>
@@ -68,7 +69,7 @@ export function SendEmailModal({
           </Link>
         </div>
 
-        <form className="space-y-4 p-5">
+        <form className="max-h-[calc(100vh-8.5rem)] space-y-4 overflow-y-auto p-5">
           <input type="hidden" name="targetId" value={target.id} />
           <input type="hidden" name="sendKey" value={sendKey} />
           <input type="hidden" name="returnTo" value={closeHref} />
@@ -180,6 +181,7 @@ export function SendEmailModal({
             </button>
           </div>
         </form>
+      </div>
       </div>
     </div>
   );
