@@ -44,7 +44,12 @@ export async function sendNowAction(formData: FormData) {
   const followupDays = Math.max(1, Number(formData.get("followupDays") ?? 5));
 
   if (!targetId || !subject || !body) {
-    return;
+    redirectWithSendFeedback(
+      returnTo,
+      targetId,
+      "error",
+      "Subject and body are required before sending."
+    );
   }
 
   const target = getSendableTarget(targetId);
@@ -76,7 +81,19 @@ export async function sendNowAction(formData: FormData) {
       subject
     });
     revalidateAfterSend(targetId);
-    return;
+    redirectWithSendFeedback(
+      returnTo,
+      targetId,
+      "error",
+      getSendBlockedMessage({
+        hasContactEmail: Boolean(target?.contactEmail),
+        doNotResend: Boolean(target?.doNotResend),
+        blockedStatus,
+        blockedPlatform,
+        blockedEmailVerification,
+        emailVerificationStatus: target?.emailVerificationStatus
+      })
+    );
   }
 
   const contactEmail = target.contactEmail;
@@ -89,7 +106,12 @@ export async function sendNowAction(formData: FormData) {
       subject
     });
     revalidateAfterSend(targetId);
-    return;
+    redirectWithSendFeedback(
+      returnTo,
+      targetId,
+      "error",
+      "SMTP is disabled. Set SMTP_ENABLED=true in production env and restart the app."
+    );
   }
 
   const outboundSendId = createPendingOutboundSend({
@@ -109,7 +131,12 @@ export async function sendNowAction(formData: FormData) {
       subject
     });
     revalidateAfterSend(targetId);
-    return;
+    redirectWithSendFeedback(
+      returnTo,
+      targetId,
+      "info",
+      "This send was already submitted. Duplicate send was blocked."
+    );
   }
 
   const transporter = nodemailer.createTransport({
@@ -148,7 +175,12 @@ export async function sendNowAction(formData: FormData) {
       error: error instanceof Error ? error.message : "unknown_error"
     });
     revalidateAfterSend(targetId);
-    return;
+    redirectWithSendFeedback(
+      returnTo,
+      targetId,
+      "error",
+      `SMTP send failed: ${error instanceof Error ? error.message : "unknown error"}`
+    );
   }
 
   try {
@@ -175,7 +207,14 @@ export async function sendNowAction(formData: FormData) {
       error: error instanceof Error ? error.message : "unknown_error"
     });
     revalidateAfterSend(targetId);
-    return;
+    redirectWithSendFeedback(
+      returnTo,
+      targetId,
+      "error",
+      `SMTP accepted the email, but ReachLog failed to save it. Do not resend until checked. ${
+        error instanceof Error ? error.message : "unknown error"
+      }`
+    );
   }
 
   revalidateAfterSend(targetId);
@@ -532,6 +571,63 @@ function getSafeReturnTo(value: string) {
   }
 
   return value;
+}
+
+function redirectWithSendFeedback(
+  returnTo: string,
+  targetId: string,
+  status: "error" | "info" | "success",
+  message: string
+): never {
+  const fallback = targetId ? `/targets/${targetId}` : "/dashboard";
+  const url = new URL(returnTo || fallback, "https://reachlog.local");
+
+  if (targetId) {
+    url.searchParams.set("sendTargetId", targetId);
+  }
+
+  url.searchParams.set("sendStatus", status);
+  url.searchParams.set("sendMessage", message.slice(0, 700));
+
+  redirect(`${url.pathname}${url.search}`);
+}
+
+function getSendBlockedMessage({
+  hasContactEmail,
+  doNotResend,
+  blockedStatus,
+  blockedPlatform,
+  blockedEmailVerification,
+  emailVerificationStatus
+}: {
+  hasContactEmail: boolean;
+  doNotResend: boolean;
+  blockedStatus: boolean;
+  blockedPlatform: boolean;
+  blockedEmailVerification: boolean;
+  emailVerificationStatus: string | null | undefined;
+}) {
+  if (!hasContactEmail) {
+    return "This target has no email address.";
+  }
+
+  if (doNotResend) {
+    return "This target is marked Do Not Resend.";
+  }
+
+  if (blockedStatus) {
+    return "This target status blocks sending.";
+  }
+
+  if (blockedPlatform) {
+    return "This platform target is marked non-actionable.";
+  }
+
+  if (blockedEmailVerification) {
+    return `Email verification blocks sending: ${emailVerificationStatus ?? "bad email"}.`;
+  }
+
+  return "ReachLog blocked this send.";
 }
 
 function createLocalMessageId(fromEmail: string) {

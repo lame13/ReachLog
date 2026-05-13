@@ -14,10 +14,13 @@ import { getDashboardData, getSendTarget } from "@/modules/outreach/queries";
 import { markDeadAction, snoozeFollowupAction } from "@/modules/followups/actions";
 import { isSendBlockedStatus } from "@/modules/outreach/status";
 import { isEmailVerificationBlocking } from "@/modules/emailVerification/service";
+import { getSendFeedback } from "@/modules/smtp/feedback";
 
 type PageProps = {
   searchParams?: Promise<{
     sendTargetId?: string;
+    sendStatus?: string;
+    sendMessage?: string;
   }>;
 };
 
@@ -25,6 +28,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const data = getDashboardData();
   const sendTarget = getSendTarget(params?.sendTargetId);
+  const sendFeedback = getSendFeedback(params);
 
   return (
     <>
@@ -270,7 +274,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
         </div>
       </section>
 
-      <SendEmailModal closeHref="/dashboard" target={sendTarget} />
+      <SendEmailModal closeHref="/dashboard" feedback={sendFeedback} target={sendTarget} />
     </>
   );
 }

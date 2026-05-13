@@ -12,11 +12,14 @@ import {
 import { getFollowups, getSendTarget } from "@/modules/outreach/queries";
 import { isSendBlockedStatus } from "@/modules/outreach/status";
 import { isEmailVerificationBlocking } from "@/modules/emailVerification/service";
+import { getSendFeedback } from "@/modules/smtp/feedback";
 
 type PageProps = {
   searchParams?: Promise<{
     filter?: "due" | "overdue" | "upcoming" | "all";
     sendTargetId?: string;
+    sendStatus?: string;
+    sendMessage?: string;
   }>;
 };
 
@@ -25,6 +28,7 @@ export default async function FollowupsPage({ searchParams }: PageProps) {
   const activeFilter = params?.filter ?? "due";
   const followups = getFollowups(activeFilter);
   const sendTarget = getSendTarget(params?.sendTargetId);
+  const sendFeedback = getSendFeedback(params);
   const tabs = [
     { label: "Due Today", filter: "due" },
     { label: "Overdue", filter: "overdue" },
@@ -162,7 +166,7 @@ export default async function FollowupsPage({ searchParams }: PageProps) {
         </div>
       </section>
 
-      <SendEmailModal closeHref="/followups" target={sendTarget} />
+      <SendEmailModal closeHref="/followups" feedback={sendFeedback} target={sendTarget} />
     </>
   );
 }

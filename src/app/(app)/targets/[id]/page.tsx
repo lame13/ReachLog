@@ -17,10 +17,15 @@ import {
   markDeadAction,
   snoozeFollowupAction
 } from "@/modules/followups/actions";
+import { getSendFeedback } from "@/modules/smtp/feedback";
 
 type PageProps = {
   params: Promise<{ id: string }>;
-  searchParams?: Promise<{ sendTargetId?: string }>;
+  searchParams?: Promise<{
+    sendTargetId?: string;
+    sendStatus?: string;
+    sendMessage?: string;
+  }>;
 };
 
 export default async function TargetDetailPage({
@@ -31,6 +36,7 @@ export default async function TargetDetailPage({
   const urlParams = await searchParams;
   const detail = getTargetDetail(id);
   const sendTarget = getSendTarget(urlParams?.sendTargetId);
+  const sendFeedback = getSendFeedback(urlParams);
 
   if (!detail) {
     notFound();
@@ -348,7 +354,11 @@ export default async function TargetDetailPage({
         </aside>
       </div>
 
-      <SendEmailModal closeHref={`/targets/${target.id}`} target={sendTarget} />
+      <SendEmailModal
+        closeHref={`/targets/${target.id}`}
+        feedback={sendFeedback}
+        target={sendTarget}
+      />
     </>
   );
 }

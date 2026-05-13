@@ -1,11 +1,13 @@
 import Link from "next/link";
-import { Save, Send, X } from "lucide-react";
+import { Save, X } from "lucide-react";
+import { SendSubmitButton } from "@/components/send-submit-button";
 import { saveDraftAction, sendNowAction } from "@/modules/smtp/actions";
 import { formatDateTime } from "@/modules/core/dates";
 import { createId } from "@/modules/core/ids";
 import { isTargetActionBlocked } from "@/modules/outreach/status";
 import { isEmailVerificationBlocking } from "@/modules/emailVerification/service";
 import { getSmtpFromOptions } from "@/modules/smtp/from-identities";
+import type { SendFeedback } from "@/modules/smtp/feedback";
 
 type SendTarget = {
   id: string;
@@ -27,10 +29,12 @@ type SendTarget = {
 
 export function SendEmailModal({
   target,
-  closeHref
+  closeHref,
+  feedback
 }: {
   target: SendTarget | null;
   closeHref: string;
+  feedback?: SendFeedback | null;
 }) {
   if (!target) {
     return null;
@@ -48,6 +52,13 @@ export function SendEmailModal({
     Boolean(target.contactEmail) &&
     !isTargetActionBlocked(target) &&
     !blockedEmailVerification;
+  const cannotSendMessage = getCannotSendMessage({
+    hasEmail: Boolean(target.contactEmail),
+    doNotResend: target.doNotResend,
+    targetBlocked: isTargetActionBlocked(target),
+    emailVerificationBlocked: blockedEmailVerification,
+    emailVerificationStatus: target.emailVerificationStatus
+  });
   const fromOptions = getSmtpFromOptions();
   const sendKey = createId("sendkey");
 
@@ -69,7 +80,25 @@ export function SendEmailModal({
           </Link>
         </div>
 
-        <form className="max-h-[calc(100vh-8.5rem)] space-y-4 overflow-y-auto p-5">
+        <form action={sendNowAction} className="max-h-[calc(100vh-8.5rem)] space-y-4 overflow-y-auto p-5">
+          {feedback && (
+            <div
+              className={`rounded-md border px-3 py-2 text-sm ${
+                feedback.tone === "success"
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                  : feedback.tone === "info"
+                    ? "border-sky-200 bg-sky-50 text-sky-800"
+                    : "border-rose-200 bg-rose-50 text-rose-800"
+              }`}
+            >
+              {feedback.message}
+            </div>
+          )}
+          {!canSend && cannotSendMessage && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              {cannotSendMessage}
+            </div>
+          )}
           <input type="hidden" name="targetId" value={target.id} />
           <input type="hidden" name="sendKey" value={sendKey} />
           <input type="hidden" name="returnTo" value={closeHref} />
@@ -113,6 +142,7 @@ export function SendEmailModal({
               className="h-10 w-full rounded-md border border-line px-3 text-sm outline-none focus:border-accent"
               name="subject"
               defaultValue={subject}
+              required
             />
           </label>
           <label className="block">
@@ -121,6 +151,7 @@ export function SendEmailModal({
               className="min-h-48 w-full resize-y rounded-md border border-line px-3 py-2 text-sm outline-none focus:border-accent"
               name="body"
               defaultValue={target.lastOutboundBody ?? ""}
+              required
             />
           </label>
 
@@ -170,19 +201,43 @@ export function SendEmailModal({
               <Save className="size-4" aria-hidden="true" />
               Save draft
             </button>
-            <button
-              formAction={sendNowAction}
-              className="inline-flex h-10 items-center gap-2 rounded-md bg-ink px-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-gray-300"
-              disabled={!canSend}
-              type="submit"
-            >
-              <Send className="size-4" aria-hidden="true" />
-              Send now
-            </button>
+            <SendSubmitButton disabled={!canSend} />
           </div>
         </form>
       </div>
       </div>
     </div>
   );
+}
+
+function getCannotSendMessage({
+  hasEmail,
+  doNotResend,
+  targetBlocked,
+  emailVerificationBlocked,
+  emailVerificationStatus
+}: {
+  hasEmail: boolean;
+  doNotResend: boolean;
+  targetBlocked: boolean;
+  emailVerificationBlocked: boolean;
+  emailVerificationStatus: string | null;
+}) {
+  if (!hasEmail) {
+    return "Send is disabled because this target has no email address.";
+  }
+
+  if (doNotResend) {
+    return "Send is disabled because this target is marked Do Not Resend.";
+  }
+
+  if (targetBlocked) {
+    return "Send is disabled because this target is blocked by status or source.";
+  }
+
+  if (emailVerificationBlocked) {
+    return `Send is disabled because email verification returned ${emailVerificationStatus ?? "a blocking status"}.`;
+  }
+
+  return "";
 }

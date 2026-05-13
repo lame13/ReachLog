@@ -12,6 +12,7 @@ import {
 } from "@/modules/outreach/queries";
 import { isEmailVerificationBlocking } from "@/modules/emailVerification/service";
 import { isTargetActionBlocked } from "@/modules/outreach/status";
+import { getSendFeedback } from "@/modules/smtp/feedback";
 
 type PageProps = {
   searchParams?: Promise<{
@@ -22,6 +23,8 @@ type PageProps = {
     flag?: string;
     page?: string;
     sendTargetId?: string;
+    sendStatus?: string;
+    sendMessage?: string;
     showCreate?: string;
   }>;
 };
@@ -45,6 +48,7 @@ export default async function TargetsPage({ searchParams }: PageProps) {
   const targets = allTargets.slice(pageStart, pageEnd);
   const filterOptions = getTargetFilterOptions();
   const sendTarget = getSendTarget(params?.sendTargetId);
+  const sendFeedback = getSendFeedback(params);
   const showCreate = params?.showCreate === "1";
   const exportParams = {
     q: params?.q,
@@ -251,7 +255,7 @@ export default async function TargetsPage({ searchParams }: PageProps) {
         )}
       </section>
 
-      <SendEmailModal closeHref={closeHref} target={sendTarget} />
+      <SendEmailModal closeHref={closeHref} feedback={sendFeedback} target={sendTarget} />
     </>
   );
 }

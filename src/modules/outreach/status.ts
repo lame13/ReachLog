@@ -29,9 +29,11 @@ export function isNonActionablePlatformTarget(target: {
   return (
     values.includes("platform:contra") ||
     values.includes("platform:codementor") ||
-    (target.sourceType?.toLowerCase() === "platform" &&
-      (target.companyName?.toLowerCase().includes("contra") ||
-        target.companyName?.toLowerCase().includes("codementor")))
+    Boolean(
+      target.sourceType?.toLowerCase() === "platform" &&
+        (target.companyName?.toLowerCase().includes("contra") ||
+          target.companyName?.toLowerCase().includes("codementor"))
+    )
   );
 }
 
