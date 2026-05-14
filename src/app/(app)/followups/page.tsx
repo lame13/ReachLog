@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { Send } from "lucide-react";
 import { ExportLinks } from "@/components/export-links";
 import { SendEmailModal } from "@/components/send-email-modal";
@@ -17,18 +18,32 @@ import { getSendFeedback } from "@/modules/smtp/feedback";
 type PageProps = {
   searchParams?: Promise<{
     filter?: "due" | "overdue" | "upcoming" | "all";
+    page?: string;
     sendTargetId?: string;
     sendStatus?: string;
     sendMessage?: string;
   }>;
 };
 
+const FOLLOWUPS_PER_PAGE = 50;
+
 export default async function FollowupsPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const activeFilter = params?.filter ?? "due";
-  const followups = getFollowups(activeFilter);
+  const allFollowups = getFollowups(activeFilter);
+  const totalFollowups = allFollowups.length;
+  const totalPages = Math.max(1, Math.ceil(totalFollowups / FOLLOWUPS_PER_PAGE));
+  const currentPage = clampPage(params?.page, totalPages);
+  const pageStart = (currentPage - 1) * FOLLOWUPS_PER_PAGE;
+  const pageEnd = pageStart + FOLLOWUPS_PER_PAGE;
+  const followups = allFollowups.slice(pageStart, pageEnd);
   const sendTarget = getSendTarget(params?.sendTargetId);
   const sendFeedback = getSendFeedback(params);
+  const listParams = {
+    filter: activeFilter === "due" ? undefined : activeFilter,
+    page: currentPage > 1 ? String(currentPage) : undefined
+  };
+  const closeHref = followupsHref(listParams);
   const tabs = [
     { label: "Due Today", filter: "due" },
     { label: "Overdue", filter: "overdue" },
@@ -69,6 +84,23 @@ export default async function FollowupsPage({ searchParams }: PageProps) {
       </div>
 
       <section className="rounded-lg border border-line bg-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3 text-sm">
+          <div className="text-muted">
+            {totalFollowups ? (
+              <>
+                Showing {pageStart + 1}-{Math.min(pageEnd, totalFollowups)} of{" "}
+                {totalFollowups} follow-ups
+              </>
+            ) : (
+              "No follow-ups in this view"
+            )}
+          </div>
+          <Pagination
+            currentPage={currentPage}
+            params={{ filter: activeFilter === "due" ? undefined : activeFilter }}
+            totalPages={totalPages}
+          />
+        </div>
         <div className="overflow-x-auto">
           <table className="min-w-[900px] text-sm">
             <thead className="bg-panel text-left text-muted">
@@ -116,7 +148,10 @@ export default async function FollowupsPage({ searchParams }: PageProps) {
                         {canSend ? (
                           <Link
                             className="inline-flex h-9 items-center gap-2 rounded-md bg-ink px-3 text-xs font-medium text-white"
-                            href={`/followups?filter=${activeFilter}&sendTargetId=${followup.targetId}`}
+                            href={followupsHref({
+                              ...listParams,
+                              sendTargetId: followup.targetId
+                            })}
                           >
                             <Send className="size-3.5" aria-hidden="true" />
                             Send
@@ -164,9 +199,112 @@ export default async function FollowupsPage({ searchParams }: PageProps) {
             </tbody>
           </table>
         </div>
+        {totalFollowups > FOLLOWUPS_PER_PAGE && (
+          <div className="flex justify-end border-t border-line px-4 py-3">
+            <Pagination
+              currentPage={currentPage}
+              params={{ filter: activeFilter === "due" ? undefined : activeFilter }}
+              totalPages={totalPages}
+            />
+          </div>
+        )}
       </section>
 
-      <SendEmailModal closeHref="/followups" feedback={sendFeedback} target={sendTarget} />
+      <SendEmailModal closeHref={closeHref} feedback={sendFeedback} target={sendTarget} />
     </>
   );
+}
+
+function Pagination({
+  currentPage,
+  params,
+  totalPages
+}: {
+  currentPage: number;
+  params: Record<string, string | undefined>;
+  totalPages: number;
+}) {
+  if (totalPages <= 1) {
+    return null;
+  }
+
+  const previousPage = currentPage - 1;
+  const nextPage = currentPage + 1;
+
+  return (
+    <nav className="inline-flex items-center gap-2" aria-label="Follow-ups pagination">
+      <PaginationLink
+        disabled={currentPage <= 1}
+        href={followupsHref({
+          ...params,
+          page: previousPage > 1 ? String(previousPage) : undefined
+        })}
+      >
+        Previous
+      </PaginationLink>
+      <span className="text-xs text-muted">
+        Page {currentPage} of {totalPages}
+      </span>
+      <PaginationLink
+        disabled={currentPage >= totalPages}
+        href={followupsHref({
+          ...params,
+          page: nextPage <= totalPages ? String(nextPage) : undefined
+        })}
+      >
+        Next
+      </PaginationLink>
+    </nav>
+  );
+}
+
+function PaginationLink({
+  children,
+  disabled,
+  href
+}: {
+  children: ReactNode;
+  disabled: boolean;
+  href: string;
+}) {
+  if (disabled) {
+    return (
+      <span className="inline-flex h-9 items-center rounded-md border border-line px-3 text-xs font-medium text-muted opacity-50">
+        {children}
+      </span>
+    );
+  }
+
+  return (
+    <Link
+      className="inline-flex h-9 items-center rounded-md border border-line px-3 text-xs font-medium hover:bg-panel"
+      href={href}
+    >
+      {children}
+    </Link>
+  );
+}
+
+function followupsHref(params: Record<string, string | undefined>) {
+  const searchParams = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(params)) {
+    if (value) {
+      searchParams.set(key, value);
+    }
+  }
+
+  const query = searchParams.toString();
+
+  return query ? `/followups?${query}` : "/followups";
+}
+
+function clampPage(value: string | undefined, totalPages: number) {
+  const parsed = Number(value ?? 1);
+
+  if (!Number.isFinite(parsed)) {
+    return 1;
+  }
+
+  return Math.min(Math.max(1, Math.floor(parsed)), totalPages);
 }
