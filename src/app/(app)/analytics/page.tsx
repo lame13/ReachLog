@@ -201,10 +201,10 @@ function DailyActivityChart({
   }>;
 }) {
   const series = [
-    { key: "outreached", label: "New outreach", className: "bg-sky-500" },
-    { key: "replied", label: "Replies", className: "bg-emerald-500" },
-    { key: "bounced", label: "Bounced", className: "bg-rose-500" },
-    { key: "followups", label: "Follow-ups", className: "bg-amber-500" }
+    { key: "outreached", label: "New outreach", color: "#0ea5e9" },
+    { key: "replied", label: "Replies", color: "#10b981" },
+    { key: "bounced", label: "Bounced", color: "#f43f5e" },
+    { key: "followups", label: "Follow-ups", color: "#f59e0b" }
   ] as const;
   const max = Math.max(...rows.map((row) => row.total), 1);
 
@@ -213,7 +213,10 @@ function DailyActivityChart({
       <div className="flex flex-wrap gap-3 border-b border-line px-4 py-3 text-xs text-muted">
         {series.map((item) => (
           <div className="inline-flex items-center gap-2" key={item.key}>
-            <span className={`size-2.5 rounded-sm ${item.className}`} />
+            <span
+              className="size-2.5 rounded-sm"
+              style={{ backgroundColor: item.color }}
+            />
             {item.label}
           </div>
         ))}
@@ -224,7 +227,31 @@ function DailyActivityChart({
             const height = row.total ? Math.max((row.total / max) * 100, 6) : 2;
 
             return (
-              <div className="flex min-w-8 flex-1 flex-col items-center gap-2" key={row.date}>
+              <div
+                className="group relative flex min-w-8 flex-1 flex-col items-center gap-2"
+                key={row.date}
+              >
+                <div className="pointer-events-none absolute bottom-16 left-1/2 z-20 hidden w-52 -translate-x-1/2 rounded-md border border-line bg-white p-3 text-left text-xs shadow-soft group-hover:block">
+                  <div className="mb-2 font-semibold text-ink">{row.date}</div>
+                  <div className="space-y-1">
+                    {series.map((item) => (
+                      <div className="flex items-center justify-between gap-3" key={item.key}>
+                        <span className="inline-flex items-center gap-2 text-muted">
+                          <span
+                            className="size-2 rounded-sm"
+                            style={{ backgroundColor: item.color }}
+                          />
+                          {item.label}
+                        </span>
+                        <span className="font-medium text-ink">{row[item.key]}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-2 flex items-center justify-between border-t border-line pt-2">
+                    <span className="text-muted">Total</span>
+                    <span className="font-semibold text-ink">{row.total}</span>
+                  </div>
+                </div>
                 <div className="flex h-40 w-full max-w-10 items-end">
                   <div
                     className="flex w-full flex-col-reverse overflow-hidden rounded-sm bg-panel"
@@ -240,9 +267,11 @@ function DailyActivityChart({
 
                       return (
                         <div
-                          className={item.className}
                           key={item.key}
-                          style={{ height: `${(value / row.total) * 100}%` }}
+                          style={{
+                            backgroundColor: item.color,
+                            height: `${(value / row.total) * 100}%`
+                          }}
                         />
                       );
                     })}
