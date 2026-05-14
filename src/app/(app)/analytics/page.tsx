@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Clock3, MailCheck, Send, Target } from "lucide-react";
+import { ActivitySeriesFilter } from "@/components/activity-series-filter";
 import { ExportLinks } from "@/components/export-links";
 import { MetricCard } from "@/components/metric-card";
 import { formatDate, formatDateTime } from "@/modules/core/dates";
@@ -11,13 +12,24 @@ import {
 
 type PageProps = {
   searchParams?: Promise<{
+    activity?: string;
     range?: string;
   }>;
 };
 
+const dailyActivitySeries = [
+  { key: "outreached", label: "New outreach", color: "#0ea5e9" },
+  { key: "replied", label: "Replies", color: "#10b981" },
+  { key: "bounced", label: "Bounced", color: "#f43f5e" },
+  { key: "followups", label: "Follow-ups", color: "#f59e0b" }
+] as const;
+
+type DailyActivitySeriesKey = (typeof dailyActivitySeries)[number]["key"];
+
 export default async function AnalyticsPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const rangeKey = getAnalyticsRangeKey(params?.range);
+  const selectedActivitySeries = getDailyActivitySeriesKeys(params?.activity);
   const data = getAnalyticsData(rangeKey);
   const replyRate = percentage(data.metrics.repliedTargets, data.metrics.touchedTargets);
   const touchRate = percentage(data.metrics.touchedTargets, data.metrics.totalTargets);
@@ -72,9 +84,15 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
               {formatDate(data.dailyRange.start)} - {formatDate(data.dailyRange.end)}
             </p>
           </div>
-          <RangeSelector selected={data.dailyRange.key} />
+          <RangeSelector
+            activity={selectedActivitySeries}
+            selected={data.dailyRange.key}
+          />
         </div>
-        <DailyActivityChart rows={data.dailyActivity} />
+        <DailyActivityChart
+          rows={data.dailyActivity}
+          selectedSeries={selectedActivitySeries}
+        />
       </section>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_420px]">
@@ -165,7 +183,13 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
   );
 }
 
-function RangeSelector({ selected }: { selected: string }) {
+function RangeSelector({
+  activity,
+  selected
+}: {
+  activity: DailyActivitySeriesKey[];
+  selected: string;
+}) {
   return (
     <div className="flex flex-wrap items-center gap-1 rounded-md border border-line bg-panel p-1">
       {analyticsRangeOptions.map((option) => {
@@ -176,7 +200,10 @@ function RangeSelector({ selected }: { selected: string }) {
             className={`inline-flex h-8 items-center rounded-md px-2 text-xs font-medium ${
               active ? "bg-white text-ink shadow-sm" : "text-muted hover:bg-white"
             }`}
-            href={option.key === "7d" ? "/analytics" : `/analytics?range=${option.key}`}
+            href={analyticsHref({
+              activity,
+              range: option.key === "7d" ? undefined : option.key
+            })}
             key={option.key}
           >
             {option.label}
@@ -188,7 +215,8 @@ function RangeSelector({ selected }: { selected: string }) {
 }
 
 function DailyActivityChart({
-  rows
+  rows,
+  selectedSeries
 }: {
   rows: Array<{
     date: string;
@@ -199,32 +227,26 @@ function DailyActivityChart({
     followups: number;
     total: number;
   }>;
+  selectedSeries: DailyActivitySeriesKey[];
 }) {
-  const series = [
-    { key: "outreached", label: "New outreach", color: "#0ea5e9" },
-    { key: "replied", label: "Replies", color: "#10b981" },
-    { key: "bounced", label: "Bounced", color: "#f43f5e" },
-    { key: "followups", label: "Follow-ups", color: "#f59e0b" }
-  ] as const;
-  const max = Math.max(...rows.map((row) => row.total), 1);
+  const selectedSet = new Set(selectedSeries);
+  const series = dailyActivitySeries.filter((item) => selectedSet.has(item.key));
+  const rowsWithSelectedTotals = rows.map((row) => ({
+    ...row,
+    visibleTotal: series.reduce((total, item) => total + row[item.key], 0)
+  }));
+  const max = Math.max(...rowsWithSelectedTotals.map((row) => row.visibleTotal), 1);
 
   return (
     <div>
-      <div className="flex flex-wrap gap-3 border-b border-line px-4 py-3 text-xs text-muted">
-        {series.map((item) => (
-          <div className="inline-flex items-center gap-2" key={item.key}>
-            <span
-              className="size-2.5 rounded-sm"
-              style={{ backgroundColor: item.color }}
-            />
-            {item.label}
-          </div>
-        ))}
-      </div>
+      <ActivitySeriesFilter
+        options={[...dailyActivitySeries]}
+        selected={selectedSeries}
+      />
       <div className="overflow-x-auto">
         <div className="flex min-w-[760px] items-end gap-2 px-4 py-4">
-          {rows.map((row) => {
-            const height = row.total ? Math.max((row.total / max) * 100, 6) : 2;
+          {rowsWithSelectedTotals.map((row) => {
+            const height = row.visibleTotal ? Math.max((row.visibleTotal / max) * 100, 6) : 2;
 
             return (
               <div
@@ -234,7 +256,7 @@ function DailyActivityChart({
                 <div className="pointer-events-none absolute bottom-16 left-1/2 z-20 hidden w-52 -translate-x-1/2 rounded-md border border-line bg-white p-3 text-left text-xs shadow-soft group-hover:block">
                   <div className="mb-2 font-semibold text-ink">{row.date}</div>
                   <div className="space-y-1">
-                    {series.map((item) => (
+                    {dailyActivitySeries.map((item) => (
                       <div className="flex items-center justify-between gap-3" key={item.key}>
                         <span className="inline-flex items-center gap-2 text-muted">
                           <span
@@ -248,8 +270,8 @@ function DailyActivityChart({
                     ))}
                   </div>
                   <div className="mt-2 flex items-center justify-between border-t border-line pt-2">
-                    <span className="text-muted">Total</span>
-                    <span className="font-semibold text-ink">{row.total}</span>
+                    <span className="text-muted">Selected total</span>
+                    <span className="font-semibold text-ink">{row.visibleTotal}</span>
                   </div>
                 </div>
                 <div className="flex h-40 w-full max-w-10 items-end">
@@ -261,7 +283,7 @@ function DailyActivityChart({
                     {series.map((item) => {
                       const value = row[item.key];
 
-                      if (!value || !row.total) {
+                      if (!value || !row.visibleTotal) {
                         return null;
                       }
 
@@ -270,7 +292,7 @@ function DailyActivityChart({
                           key={item.key}
                           style={{
                             backgroundColor: item.color,
-                            height: `${(value / row.total) * 100}%`
+                            height: `${(value / row.visibleTotal) * 100}%`
                           }}
                         />
                       );
@@ -278,7 +300,7 @@ function DailyActivityChart({
                   </div>
                 </div>
                 <div className="w-14 text-center text-[11px] text-muted">{row.label}</div>
-                <div className="text-xs font-medium">{row.total}</div>
+                <div className="text-xs font-medium">{row.visibleTotal}</div>
               </div>
             );
           })}
@@ -286,6 +308,49 @@ function DailyActivityChart({
       </div>
     </div>
   );
+}
+
+function getDailyActivitySeriesKeys(value: string | undefined) {
+  const validKeys = new Set(dailyActivitySeries.map((item) => item.key));
+
+  if (!value) {
+    return dailyActivitySeries.map((item) => item.key);
+  }
+
+  if (value === "none") {
+    return [];
+  }
+
+  const keys = value
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item): item is DailyActivitySeriesKey => validKeys.has(item as DailyActivitySeriesKey));
+
+  return keys.length ? keys : dailyActivitySeries.map((item) => item.key);
+}
+
+function analyticsHref({
+  activity,
+  range
+}: {
+  activity: DailyActivitySeriesKey[];
+  range?: string;
+}) {
+  const params = new URLSearchParams();
+
+  if (range) {
+    params.set("range", range);
+  }
+
+  if (activity.length === 0) {
+    params.set("activity", "none");
+  } else if (activity.length !== dailyActivitySeries.length) {
+    params.set("activity", activity.join(","));
+  }
+
+  const query = params.toString();
+
+  return query ? `/analytics?${query}` : "/analytics";
 }
 
 function percentage(value: number, total: number) {
