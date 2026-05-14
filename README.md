@@ -6,7 +6,21 @@ ReachLog is a private outreach command center:
 targets -> outreach events -> email threads -> follow-up tasks -> dedupe protection -> analytics
 ```
 
-It is intentionally a modular monolith, not a generic CRM and not a microservice system.
+It is intentionally a modular monolith, not a generic sales CRM and not a microservice system. The app is built for one owner, one private deployment, and a small amount of high-signal outreach data.
+
+## What It Does
+
+- Tracks outreach targets, contacts, companies, domains, source URLs, statuses, and dedupe keys.
+- Imports canonical outreach CSVs with dedupe preview before insert.
+- Preserves historical outreach context in events: subject, body/summary, notes, next action, follow-up date, and source timestamp.
+- Stores email threads and messages from Proton Bridge IMAP.
+- Sends email through Proton Bridge SMTP from one or more configured sender identities.
+- Creates manual follow-up tasks and keeps due/overdue/upcoming queues.
+- Prevents duplicate outreach with unique contact, target, message, and contact-form dedupe keys.
+- Verifies newly added emails through EmailListVerify when enabled.
+- Sends Telegram notifications for replies, due follow-ups, worker failures, backup failures, and test messages.
+- Exports targets, messages, follow-ups, events, contact forms, and outbound sends as CSV or JSON.
+- Runs on SQLite first, with daily safe backups via `VACUUM INTO`.
 
 ## Stack
 
@@ -15,9 +29,23 @@ It is intentionally a modular monolith, not a generic CRM and not a microservice
 - React
 - Tailwind CSS
 - Drizzle ORM
-- SQLite first
+- SQLite
 - Node worker scripts
-- Proton Bridge-compatible IMAP/SMTP settings
+- Proton Bridge-compatible IMAP/SMTP
+- Optional Telegram module
+- Optional EmailListVerify module
+
+## Current Production Shape
+
+The intended Forge/VDS production paths are:
+
+```text
+APP_URL=https://reachlog-pzjckw1w.on-forge.com
+DATABASE_PATH=/home/reach-log/reachlog-pzjckw1w.on-forge.com/shared/data/app.sqlite
+BACKUP_DIR=/home/reach-log/reachlog-pzjckw1w.on-forge.com/shared/data/backups
+```
+
+The database must live in `shared/data`, not inside a release directory. Forge purges old releases, so release-local files like `releases/.../.data/app.sqlite` are stale artifacts and should not be used.
 
 ## Quick Start
 
@@ -32,49 +60,33 @@ Open:
 http://localhost:3000
 ```
 
-The app creates a local SQLite database automatically at:
+Local SQLite defaults to:
 
 ```text
 .data/app.sqlite
 ```
 
-For production, set:
-
-```text
-APP_URL=https://reachlog-pzjckw1w.on-forge.com
-DATABASE_PATH=/home/reach-log/reachlog-pzjckw1w.on-forge.com/shared/data/app.sqlite
-BACKUP_DIR=/home/reach-log/reachlog-pzjckw1w.on-forge.com/shared/data/backups
-```
-
-## Environment
-
-Copy the example file and edit the values you need:
+Copy env examples as needed:
 
 ```bash
 cp .env.example .env.local
 ```
 
-For Forge/VDS production values, start from `.env.production.example`.
+For Forge/VDS production, use `.env.production.example` as the starting point.
 
-Important flags:
+## Important Env
+
+Core:
 
 ```text
 TZ=Asia/Bangkok
+APP_URL=https://reachlog-pzjckw1w.on-forge.com
+DATABASE_PATH=/home/reach-log/reachlog-pzjckw1w.on-forge.com/shared/data/app.sqlite
+BACKUP_DIR=/home/reach-log/reachlog-pzjckw1w.on-forge.com/shared/data/backups
 SEED_DEMO_DATA=false
-SMTP_ENABLED=false
-SMTP_SECURE=false
-IMAP_ENABLED=false
-IMAP_SECURITY=starttls
-IMAP_TLS_VERIFY=false
-IMAP_MAILBOXES=INBOX,Sent
-IMAP_LOOKBACK_DAYS=90
-TELEGRAM_ENABLED=false
-EMAILLISTVERIFY_ENABLED=false
-EMAILLISTVERIFY_API_KEY=
 ```
 
-The app assumes a single owner user. For production, enable the built-in Basic
-Auth gate:
+Single-owner auth:
 
 ```text
 APP_BASIC_AUTH_ENABLED=true
@@ -82,10 +94,65 @@ APP_BASIC_AUTH_USER=owner
 APP_BASIC_AUTH_PASSWORD=use-a-long-random-password
 ```
 
-You can still put Cloudflare Access, Forge Nginx auth, or Caddy `basic_auth` in
-front as an extra gate.
+SMTP through Proton Bridge:
 
-Before a production import, run:
+```text
+SMTP_ENABLED=true
+SMTP_HOST=127.0.0.1
+SMTP_PORT=1025
+SMTP_SECURE=false
+SMTP_TLS_VERIFY=false
+SMTP_USER=your-bridge-user
+SMTP_PASS=your-bridge-password
+SMTP_FROM_IDENTITIES=Niko <niko@wpfixpath.work>|Niko <niko@indexlane.dev>
+```
+
+`SMTP_SECURE=false` means the connection does not start with implicit TLS. Proton Bridge may still advertise STARTTLS after connect; `SMTP_TLS_VERIFY=false` disables certificate verification for Bridge's local self-signed certificate.
+
+Multiple sender identities can share the same Bridge credentials, as above. If a sender ever needs separate SMTP credentials:
+
+```text
+SMTP_FROM_IDENTITIES=Niko <niko@wpfixpath.work>::bridge-user-1::bridge-pass-1|Niko <niko@indexlane.dev>::bridge-user-2::bridge-pass-2
+```
+
+IMAP through Proton Bridge:
+
+```text
+IMAP_ENABLED=true
+IMAP_HOST=127.0.0.1
+IMAP_PORT=1143
+IMAP_SECURITY=starttls
+IMAP_TLS_VERIFY=false
+IMAP_USER=your-bridge-user
+IMAP_PASS=your-bridge-password
+IMAP_MAILBOXES=INBOX,Sent
+IMAP_LOOKBACK_DAYS=90
+```
+
+Telegram:
+
+```text
+TELEGRAM_ENABLED=true
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
+```
+
+EmailListVerify:
+
+```text
+EMAILLISTVERIFY_ENABLED=true
+EMAILLISTVERIFY_API_KEY=
+EMAILLISTVERIFY_TIMEOUT_MS=15000
+EMAILLISTVERIFY_BATCH_SIZE=25
+```
+
+Backblaze B2 via rclone:
+
+```text
+B2_REMOTE=b2:your-bucket/outreach-crm/
+```
+
+Before a production import or deploy sanity check:
 
 ```bash
 npm run prod:check
@@ -93,13 +160,245 @@ npm run prod:check
 
 ## Pages
 
-- `/dashboard` shows replies needing action, follow-ups due, sent/no-reply counts, and recent mail.
-- `/targets` lists, searches, filters, and creates outreach targets with status, source, and dedupe keys.
-- `/targets/[id]` edits target/contact fields and shows timeline, thread, contact forms, notes, and follow-up state.
-- `/followups` is the manual follow-up queue with due/overdue/upcoming filters and completion actions.
-- `/import` is the CSV intake and dedupe preview surface. It supports the canonical outreach columns: `target`, `contact_type`, `contact_value`, `domain_key`, `dedupe_key`, `subject_or_form_context`, `message_text_or_summary`, `follow_up_date`, `next_action`, and `do_not_resend`. Imported `do_not_resend` is treated as dedupe protection unless the row status/action is explicitly dead, bounced, skipped, blocked, or do-not-send.
-- `/analytics` summarizes funnel metrics, source performance, recent events, and event/source/status counts.
-- `/settings/modules` shows runtime module state from environment flags.
+### `/dashboard`
+
+Shows:
+
+- replies needing action
+- follow-ups due
+- overdue follow-ups
+- sent/no-reply threads
+- send anomalies
+- recently imported mail
+
+Dashboard action lists exclude dead, bounced, skipped, blocked, do-not-resend, and known non-actionable platform records. WordPress.org notification emails are also filtered from reply-action counts.
+
+### `/targets`
+
+Shows all targets with search, filters, pagination, source, dedupe key, status, and send action.
+
+Behavior:
+
+- Sorted by latest activity, including message time.
+- Paginated at 50 targets per page.
+- Send button is disabled for no-email, dead, bounced, skipped, blocked, do-not-resend, non-actionable platform targets, and blocking email-verification statuses.
+- Export links preserve the active target filters.
+
+### `/targets/[id]`
+
+Target detail page shows:
+
+- contact/company/source fields
+- target status and do-not-resend state
+- message thread
+- timeline events
+- contact-form submissions
+- notes
+- follow-up creation and existing follow-ups
+
+Message behavior:
+
+- Messages sort by actual mail time, newest first.
+- Unread inbound messages are highlighted.
+- Inbound messages are marked read when the target page is loaded.
+
+Do-not-resend behavior:
+
+- `Do not resend` marks the target dead and cancels open follow-ups.
+- `Allow resend` clears the do-not-resend flag but does not blindly invent a new status.
+
+### `/followups`
+
+Manual follow-up queue with filters:
+
+- due today
+- overdue
+- upcoming
+- all open
+
+Behavior:
+
+- Shows total count: `Showing X-Y of N follow-ups`.
+- Paginated at 50 follow-ups per page.
+- Send, complete, snooze, and dead actions are available per row.
+- Pagination and filter state are preserved when opening/closing the send modal.
+- Dead action closes/cancels open follow-up work for that target.
+
+### `/import`
+
+CSV import with preview and dedupe protection.
+
+Supported canonical outreach fields include:
+
+```text
+target
+contact_type
+contact_value
+domain_key
+dedupe_key
+subject_or_form_context
+message_text_or_summary
+follow_up_date
+next_action
+do_not_resend
+source_reference
+```
+
+Import behavior:
+
+- Respects provided `dedupe_key`.
+- Maps email/form/thread/url-style contact types.
+- Rejects unsupported tracker CSVs like platform-status style imports.
+- Treats canonical `do_not_resend` as dedupe-only protection unless the row also has a hard-dead signal.
+- Creates `followup_tasks` only when the imported row is actually actionable.
+- Skips automatic follow-ups for contact forms, monitor-only rows, already-followed-up rows, and conditional wait-only rows.
+- Preserves source timestamps from fields like `date_sent`, `date_posted`, `date_updated`, `date_recorded`, or embedded date text.
+- Contact form rows create `contact_form_submissions` for dedupe/history.
+
+### `/analytics`
+
+Shows:
+
+- total targets
+- touched targets
+- replied targets
+- open follow-ups
+- source performance
+- recent events
+- daily activity chart
+
+Daily chart ranges:
+
+- 7 days
+- 2 weeks
+- this month
+- last month
+- last 30 days
+
+Daily activity chart separates:
+
+- `New outreach` in blue
+- `Replies` in green
+- `Bounced` in red
+- `Follow-ups` in amber
+
+Follow-up sends are not counted as blue new outreach anymore. If a send has a matching `followup_sent` event, it is counted as follow-up activity. Later outbound sends for already-touched targets are also treated as follow-ups.
+
+### `/settings/modules`
+
+Shows module state based on environment flags. Includes Telegram test send. The Telegram test sends a real message and includes the ReachLog link.
+
+## Send Modal
+
+The send modal is used from dashboard, targets, target detail, and follow-ups.
+
+Current behavior:
+
+- Scrolls correctly on small screens.
+- Shows `Sending...` while the server action is running.
+- Requires subject and body.
+- Shows visible success/info/error feedback after server action redirects.
+- Explains why send is disabled before clicking.
+- Blocks duplicate double-submit with `send_key`.
+- Does not crash the UI on SMTP failure.
+- Records send failures and send anomalies.
+- Splits SMTP accept from DB persistence failure. If SMTP accepted the email but the DB write failed, it records `smtp_accepted_persist_failed` and warns not to resend blindly.
+
+Sender behavior:
+
+- `From` dropdown is populated from `SMTP_FROM_IDENTITIES`.
+- The latest outbound sender for the target is preselected.
+- If there is no previous outbound sender, the app tries to infer sender from target/source/domain text.
+- Otherwise it falls back to the first configured sender identity.
+- Message-ID domain follows the selected sender domain.
+
+Body/follow-up behavior:
+
+- The modal defaults to the latest outbound body stored for that target.
+- New targets with no prior outbound message start with a blank body.
+- `Create next follow-up` defaults to 5 days.
+- Follow-up tasks created after sending use the actual body just sent as `suggested_body`.
+
+## Mail Sync
+
+`worker:mail-sync` imports from Proton Bridge IMAP.
+
+Threading behavior:
+
+- Uses `Message-ID`, `In-Reply-To`, and `References` first.
+- Falls back to exact participant email.
+- Falls back to domain matching for non-free-mail domains.
+- Uses normalized subject as a fallback.
+- Repeated `Re:` / `Fwd:` prefixes are normalized.
+- Existing messages are skipped by unique `messages.message_id`.
+- Thread state is computed by actual message timestamps, not import order.
+- Message display uses actual sent/received timestamp, not import time.
+
+Status behavior:
+
+- Inbound human reply sets thread/target as replied and cancels open follow-ups.
+- Outbound sync preserves meaningful imported statuses instead of overwriting everything as `sent`.
+- Bounces/delivery failures are classified separately and mark target status as `bounced_dead_address`.
+- WordPress.org thread notifications and similar non-actionable notifications are stored but do not trigger "reply needing action".
+
+Telegram reply notifications:
+
+- Sent only for actionable inbound replies.
+- Include sender, subject, cleaned current-reply text, and target link.
+- The reply snippet strips common quoted-history blocks like `On ... wrote:`, `-----Original Message-----`, `From:/Sent:/To:/Subject:`, quote lines, and signatures.
+- Full email body is still stored in ReachLog.
+
+## SMTP Sending
+
+`sendNowAction` sends through Proton Bridge SMTP with Nodemailer.
+
+Safety behavior:
+
+- Blocks no-email targets.
+- Blocks do-not-resend targets.
+- Blocks dead/bounced/skipped/blocked/do-not-send statuses.
+- Blocks known non-actionable platform targets like `platform:contra` and `platform:codementor`.
+- Blocks EmailListVerify statuses considered unsafe.
+- Uses an idempotency key to prevent double-click duplicate sends.
+- Stores outgoing messages in `messages`.
+- Updates `threads`, `outbound_sends`, `followup_tasks`, and `events`.
+- Sends `In-Reply-To` and `References` when replying inside an existing thread.
+
+## Email Verification
+
+EmailListVerify is optional and controlled by:
+
+```text
+EMAILLISTVERIFY_ENABLED=true
+EMAILLISTVERIFY_API_KEY=
+```
+
+Behavior:
+
+- New email contacts can be checked once in the background.
+- Recheck is manual through the target UI.
+- Verification status is stored on the contact.
+- Blocking statuses disable send actions.
+
+Worker:
+
+```bash
+npm run worker:email-verify
+```
+
+## Telegram
+
+Telegram is event-driven:
+
+- follow-up due
+- reply received
+- worker failure
+- backup failure
+- test notification
+
+Notifications include ReachLog links where useful.
+
+Due follow-ups are stamped after notification so the same overdue task does not repeatedly notify.
 
 ## Exports
 
@@ -112,13 +411,36 @@ Export URLs support `format=csv` or `format=json`:
 - `/api/export/contact-forms`
 - `/api/export/outbound-sends`
 
-The targets export accepts the same filters as `/targets`: `q`, `status`,
-`source`, `domain`, and `flag`. Follow-up export accepts `filter=due`,
-`overdue`, `upcoming`, or `all`.
+Examples:
+
+```text
+/api/export/targets?format=csv
+/api/export/messages?format=json
+/api/export/followups?filter=due&format=csv
+```
+
+Targets export accepts:
+
+```text
+q
+status
+source
+domain
+flag
+```
+
+Follow-up export accepts:
+
+```text
+filter=due
+filter=overdue
+filter=upcoming
+filter=all
+```
 
 ## Database
 
-The core tables are:
+Core tables:
 
 - `contacts`
 - `targets`
@@ -127,17 +449,22 @@ The core tables are:
 - `followup_tasks`
 - `contact_form_submissions`
 - `events`
+- `outbound_sends`
 - `jobs`
 - `module_settings`
+- `worker_locks`
+- `mailbox_cursors`
 
-Unique indexes protect the important dedupe surfaces:
+Important unique indexes:
 
 - `contacts.email`
 - `targets.dedupe_key`
 - `messages.message_id`
 - `contact_form_submissions.dedupe_key`
+- `outbound_sends.message_id`
+- `outbound_sends.send_key`
 
-The database is bootstrapped on first app or worker run. Drizzle schema lives in:
+The database bootstraps on first app or worker run. Drizzle schema lives in:
 
 ```text
 src/modules/core/db/schema.ts
@@ -145,66 +472,64 @@ src/modules/core/db/schema.ts
 
 ## Workers
 
-Run these from cron or systemd timers:
+Run these from Forge scheduled jobs, cron, or systemd timers:
 
 ```bash
 npm run worker:mail-sync
 npm run worker:followup-check
+npm run worker:email-verify
 npm run worker:backup
 ```
 
 Suggested schedule:
 
 ```text
-mail-sync        every 1 minute
+mail-sync        every 1-5 minutes
 followup-check   every 15 minutes
+email-verify     every 5-15 minutes when enabled
 backup           daily
 ```
 
-`worker:mail-sync` connects to IMAP when `IMAP_ENABLED=true`. It imports unseen messages, links them to existing threads by `Message-ID`, `In-Reply-To`, and `References` first, falls back to known contact email/domain plus normalized subject, sends Telegram notifications for inbound replies, and records unlinked messages as mailbox events.
+Worker locks are stored in SQLite so overlapping timers do not run the same job twice.
 
-`worker:followup-check` finds due follow-ups and sends Telegram notifications when Telegram is enabled. It stamps notification fields so the same overdue task does not keep spamming.
-
-`worker:backup` uses SQLite `VACUUM INTO`, gzips the snapshot, and optionally copies the backup directory with `rclone` when `B2_REMOTE` is set.
-
-Workers use SQLite-backed leases so timer overlap does not run the same job twice
-at the same time. Mail sync stores per-mailbox IMAP UID cursors in SQLite.
-
-## Proton Bridge
-
-Use Proton Bridge on the same VDS or private network as the app and point the env vars at Bridge's local IMAP/SMTP ports:
-
-```text
-IMAP_HOST=127.0.0.1
-IMAP_PORT=1143
-IMAP_SECURITY=starttls
-IMAP_TLS_VERIFY=false
-SMTP_HOST=127.0.0.1
-SMTP_PORT=1025
-SMTP_TLS_VERIFY=false
-```
-
-Exact ports depend on your Bridge configuration.
-
-For two sender addresses that share the same Bridge login/password:
-
-```text
-SMTP_USER=your-bridge-user
-SMTP_PASS=your-bridge-password
-SMTP_FROM_IDENTITIES=Niko <niko@wpfixpath.work>|Niko <niko@indexlane.dev>
-```
-
-If an address needs separate SMTP credentials, an identity can override them:
-
-```text
-SMTP_FROM_IDENTITIES=Niko <niko@wpfixpath.work>::bridge-user-1::bridge-pass-1|Niko <niko@indexlane.dev>::bridge-user-2::bridge-pass-2
-```
-
-List Bridge mailbox names before enabling sync:
+List Proton Bridge mailboxes before enabling sync:
 
 ```bash
 npm run worker:list-mailboxes
 ```
+
+## Backup And Restore
+
+Backup worker uses SQLite `VACUUM INTO`, gzips the result, and optionally copies backups to B2 with `rclone`.
+
+Manual backup:
+
+```bash
+npm run worker:backup
+```
+
+Restore test pattern:
+
+```bash
+gunzip -c /home/reach-log/reachlog-pzjckw1w.on-forge.com/shared/data/backups/app-YYYY-MM-DD.sqlite.gz > /tmp/reachlog-restore.sqlite
+DATABASE_PATH=/tmp/reachlog-restore.sqlite npm run worker:followup-check
+```
+
+Do not copy a live SQLite database with plain `cp` while the app may be writing.
+
+## Production Maintenance Scripts
+
+```bash
+npm run prod:check
+npm run prod:backfill-source-timestamps
+npm run prod:backfill-mail-event-timestamps
+```
+
+`prod:check` verifies key production paths, dependencies, env safety, and module config.
+
+`prod:backfill-source-timestamps` repairs imported outreach/form event dates from historical CSV payload data.
+
+`prod:backfill-mail-event-timestamps` repairs already-imported mail events by matching event `messageId` to the `messages` table, so analytics use actual email timestamps instead of sync time.
 
 ## Deployment Shape
 
@@ -215,16 +540,19 @@ npm run build
 npm run start
 ```
 
-Put Caddy, Cloudflare Tunnel, or another reverse proxy in front of the app. For a Caddy-protected single-user deployment, the shape is:
+The app should bind behind the Forge/Nginx reverse proxy. The intended shape:
 
 ```text
-HTTPS reverse proxy -> Next.js app -> SQLite file
+HTTPS reverse proxy -> Next.js app on localhost -> SQLite shared/data file
                          |
-                         -> worker scripts via cron/systemd
-                         -> Proton Bridge IMAP/SMTP
+                         -> worker scripts via Forge scheduled jobs
+                         -> Proton Bridge IMAP/SMTP on same VDS/private network
+                         -> optional Telegram
+                         -> optional EmailListVerify
+                         -> optional rclone B2 backups
 ```
 
-Production examples live in:
+Production examples:
 
 ```text
 docs/production.md
@@ -232,16 +560,21 @@ deploy/caddy/Caddyfile.example
 deploy/systemd/
 ```
 
-## Roadmap
+Do not run app scripts with `sudo`. Run as the site user, `reach-log`, so SQLite files remain writable by the app.
 
-Near-term:
+## Current Non-Goals
 
+- No multi-user/team permission system.
+- No Better Auth/OAuth/registration/password reset.
+- No Redis/BullMQ/RabbitMQ.
+- No automatic mass follow-up sender.
+- No contracts/invoices inside outreach tables.
+- No marketplace/WP.org/platform tracker import modes yet, beyond safe rejection/non-actionable handling.
+
+## Later
+
+- Dedicated import modes for marketplace bids, WP.org threads, and platform statuses.
 - Contact form submission creation from the UI.
-- Mailbox settings validation from the UI.
-- Export views for targets, messages, and follow-ups.
-
-Later:
-
-- Jobs table processing if worker needs grow.
-- PostgreSQL migration if multiple workers or team usage becomes real.
-- Contracts and invoices as separate modules after a target becomes a client.
+- Mailbox connection test buttons.
+- PostgreSQL only if multiple workers/team usage/heavier analytics become real.
+- Contracts/invoices as separate modules after a target becomes a client.
