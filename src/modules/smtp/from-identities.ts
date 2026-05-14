@@ -20,6 +20,56 @@ export function getSmtpFromOptions() {
   }));
 }
 
+export function selectPreferredSmtpFrom(target: {
+  companyName?: string | null;
+  contactEmail?: string | null;
+  dedupeKey?: string | null;
+  lastOutboundFrom?: string | null;
+  sourceType?: string | null;
+  sourceUrl?: string | null;
+}) {
+  const options = getSmtpFromOptions();
+  const lastOutbound = target.lastOutboundFrom?.trim().toLowerCase();
+
+  if (lastOutbound) {
+    const match = options.find(
+      (option) =>
+        option.value.toLowerCase() === lastOutbound ||
+        option.email.toLowerCase() === lastOutbound ||
+        lastOutbound.includes(option.email.toLowerCase())
+    );
+
+    if (match) {
+      return match.value;
+    }
+  }
+
+  const targetText = [
+    target.companyName,
+    target.contactEmail,
+    target.dedupeKey,
+    target.sourceType,
+    target.sourceUrl
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  for (const option of options) {
+    const domain = option.email.split("@")[1]?.toLowerCase();
+    const brand = domain?.split(".")[0];
+
+    if (
+      (domain && targetText.includes(domain)) ||
+      (brand && brand.length >= 4 && targetText.includes(brand))
+    ) {
+      return option.value;
+    }
+  }
+
+  return options[0].value;
+}
+
 export function selectSmtpIdentity(requestedFrom: string | null | undefined) {
   const options = getConfiguredSmtpFromIdentities();
   const normalized = requestedFrom?.trim().toLowerCase();

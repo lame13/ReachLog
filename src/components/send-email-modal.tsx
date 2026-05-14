@@ -6,7 +6,10 @@ import { formatDateTime } from "@/modules/core/dates";
 import { createId } from "@/modules/core/ids";
 import { isTargetActionBlocked } from "@/modules/outreach/status";
 import { isEmailVerificationBlocking } from "@/modules/emailVerification/service";
-import { getSmtpFromOptions } from "@/modules/smtp/from-identities";
+import {
+  getSmtpFromOptions,
+  selectPreferredSmtpFrom
+} from "@/modules/smtp/from-identities";
 import type { SendFeedback } from "@/modules/smtp/feedback";
 
 type SendTarget = {
@@ -23,6 +26,7 @@ type SendTarget = {
   contactName: string | null;
   status: string;
   lastOutboundAt: string | null;
+  lastOutboundFrom: string | null;
   lastOutboundBody: string | null;
   subject: string | null;
 };
@@ -60,6 +64,7 @@ export function SendEmailModal({
     emailVerificationStatus: target.emailVerificationStatus
   });
   const fromOptions = getSmtpFromOptions();
+  const selectedFrom = selectPreferredSmtpFrom(target);
   const sendKey = createId("sendkey");
 
   return (
@@ -108,7 +113,7 @@ export function SendEmailModal({
               <select
                 className="h-10 w-full rounded-md border border-line bg-white px-3 text-sm outline-none focus:border-accent"
                 name="fromEmail"
-                defaultValue={fromOptions[0].value}
+                defaultValue={selectedFrom}
               >
                 {fromOptions.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -118,11 +123,14 @@ export function SendEmailModal({
               </select>
             ) : (
               <>
-                <input name="fromEmail" type="hidden" value={fromOptions[0].value} />
+                <input name="fromEmail" type="hidden" value={selectedFrom} />
                 <input
                   className="h-10 w-full rounded-md border border-line px-3 text-sm outline-none focus:border-accent"
                   readOnly
-                  value={fromOptions[0].label}
+                  value={
+                    fromOptions.find((option) => option.value === selectedFrom)?.label ??
+                    fromOptions[0].label
+                  }
                 />
               </>
             )}

@@ -849,6 +849,17 @@ export function getSendTarget(targetId: string | undefined) {
         threads.last_outbound_at as lastOutboundAt,
         threads.subject,
         (
+          SELECT messages.from_email
+          FROM messages
+          INNER JOIN threads message_threads ON message_threads.id = messages.thread_id
+          WHERE message_threads.target_id = targets.id
+            AND messages.direction = 'outbound'
+            AND messages.from_email IS NOT NULL
+            AND trim(messages.from_email) != ''
+          ORDER BY COALESCE(messages.sent_at, messages.created_at) DESC
+          LIMIT 1
+        ) as lastOutboundFrom,
+        (
           SELECT messages.body_text
           FROM messages
           INNER JOIN threads message_threads ON message_threads.id = messages.thread_id
@@ -882,6 +893,7 @@ export function getSendTarget(targetId: string | undefined) {
         emailVerificationError: string | null;
         contactName: string | null;
         lastOutboundAt: string | null;
+        lastOutboundFrom: string | null;
         subject: string | null;
         lastOutboundBody: string | null;
       }
