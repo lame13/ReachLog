@@ -628,6 +628,7 @@ function getDailyActivity(sqlite: ReturnType<typeof getSqlite>, start: Date, end
       SELECT
         entity_id as entityId,
         event_type as eventType,
+        payload_json as payloadJson,
         created_at as createdAt
       FROM events
       WHERE created_at >= ?
@@ -648,9 +649,30 @@ function getDailyActivity(sqlite: ReturnType<typeof getSqlite>, start: Date, end
     .all(start.toISOString(), end.toISOString()) as Array<{
     entityId: string;
     eventType: string;
+    payloadJson: string | null;
     createdAt: string;
   }>;
 
+  const seenOutboundTargets = new Set(
+    (
+      sqlite
+        .prepare(
+          `
+          SELECT DISTINCT entity_id as entityId
+          FROM events
+          WHERE created_at < ?
+            AND event_type IN ('outreach_logged', 'email_sent', 'form_submitted', 'followup_sent')
+        `
+        )
+        .all(start.toISOString()) as Array<{ entityId: string }>
+    ).map((row) => row.entityId)
+  );
+  const followupMessageKeys = new Set(
+    rows
+      .filter((row) => row.eventType === "followup_sent")
+      .map((row) => eventMessageKey(row))
+      .filter((value): value is string => Boolean(value))
+  );
   const targetKey = (row: { entityId: string; eventType: string; createdAt: string }) =>
     row.entityId || `${row.eventType}:${row.createdAt}`;
 
@@ -664,10 +686,34 @@ function getDailyActivity(sqlite: ReturnType<typeof getSqlite>, start: Date, end
 
     if (
       row.eventType === "outreach_logged" ||
-      row.eventType === "email_sent" ||
       row.eventType === "form_submitted"
     ) {
-      bucket.outreached.add(targetKey(row));
+      const key = targetKey(row);
+
+      bucket.outreached.add(key);
+      seenOutboundTargets.add(key);
+      continue;
+    }
+
+    if (row.eventType === "email_sent") {
+      const key = targetKey(row);
+
+      if (followupMessageKeys.has(eventMessageKey(row) ?? "")) {
+        bucket.followups.add(key);
+        seenOutboundTargets.add(key);
+        continue;
+      }
+
+      if (!seenOutboundTargets.has(key)) {
+        bucket.outreached.add(key);
+        seenOutboundTargets.add(key);
+        continue;
+      }
+
+      if (!bucket.outreached.has(key)) {
+        bucket.followups.add(key);
+      }
+
       continue;
     }
 
@@ -682,7 +728,10 @@ function getDailyActivity(sqlite: ReturnType<typeof getSqlite>, start: Date, end
     }
 
     if (row.eventType === "followup_sent") {
-      bucket.followups.add(targetKey(row));
+      const key = targetKey(row);
+
+      bucket.followups.add(key);
+      seenOutboundTargets.add(key);
     }
   }
 
@@ -729,6 +778,25 @@ function createDailyBuckets(start: Date, end: Date) {
   }
 
   return buckets;
+}
+
+function eventMessageKey(row: { entityId: string; payloadJson: string | null }) {
+  const payload = parseEventPayload(row.payloadJson);
+  const messageId = typeof payload?.messageId === "string" ? payload.messageId : "";
+
+  return messageId ? `${row.entityId}:${messageId}` : null;
+}
+
+function parseEventPayload(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(value) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
 }
 
 function getAnalyticsDateRange(rangeKey: AnalyticsRangeKey) {

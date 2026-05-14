@@ -201,7 +201,7 @@ function DailyActivityChart({
   }>;
 }) {
   const series = [
-    { key: "outreached", label: "Outreached", className: "bg-sky-500" },
+    { key: "outreached", label: "New outreach", className: "bg-sky-500" },
     { key: "replied", label: "Replies", className: "bg-emerald-500" },
     { key: "bounced", label: "Bounced", className: "bg-rose-500" },
     { key: "followups", label: "Follow-ups", className: "bg-amber-500" }
@@ -229,7 +229,7 @@ function DailyActivityChart({
                   <div
                     className="flex w-full flex-col-reverse overflow-hidden rounded-sm bg-panel"
                     style={{ height: `${height}%` }}
-                    title={`${row.date}: ${row.outreached} outreached, ${row.replied} replies, ${row.bounced} bounced, ${row.followups} follow-ups`}
+                    title={`${row.date}: ${row.outreached} new outreach, ${row.replied} replies, ${row.bounced} bounced, ${row.followups} follow-ups`}
                   >
                     {series.map((item) => {
                       const value = row[item.key];
