@@ -284,6 +284,8 @@ Daily activity chart separates:
 
 Follow-up sends are not counted as blue new outreach anymore. If a send has a matching `followup_sent` event, it is counted as follow-up activity. Later outbound sends for already-touched targets are also treated as follow-ups.
 
+The top `Outreached` metric and Source Performance `Outreached` column count real outbound evidence from synced mail threads, live `email_sent` events, and imported `outreach_logged` events. Imported `contact_form` rows are not treated as sent email unless a real outbound email exists for that target.
+
 ### `/settings/modules`
 
 Shows module state based on environment flags. Includes Telegram test send. The Telegram test sends a real message and includes the ReachLog link.

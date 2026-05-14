@@ -439,6 +439,50 @@ function actionableTargetSql(targetAlias: string) {
   `;
 }
 
+function outboundEvidenceSql(targetIdExpression: string, sourceTypeExpression: string) {
+  const sourceType = `lower(COALESCE(${sourceTypeExpression}, ''))`;
+
+  return `
+    EXISTS (
+      SELECT 1
+      FROM threads outbound_threads
+      WHERE outbound_threads.target_id = ${targetIdExpression}
+        AND outbound_threads.last_outbound_at IS NOT NULL
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM events outbound_events
+      WHERE outbound_events.entity_type = 'target'
+        AND outbound_events.entity_id = ${targetIdExpression}
+        AND (
+          outbound_events.event_type = 'email_sent'
+          OR (
+            outbound_events.event_type = 'outreach_logged'
+            AND ${sourceType} != 'contact_form'
+          )
+        )
+    )
+  `;
+}
+
+function replyEvidenceSql(targetIdExpression: string) {
+  return `
+    EXISTS (
+      SELECT 1
+      FROM threads reply_threads
+      WHERE reply_threads.target_id = ${targetIdExpression}
+        AND reply_threads.last_inbound_at IS NOT NULL
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM events reply_events
+      WHERE reply_events.entity_type = 'target'
+        AND reply_events.entity_id = ${targetIdExpression}
+        AND reply_events.event_type IN ('reply_received', 'email_received')
+    )
+  `;
+}
+
 export function getFollowups(filter: "due" | "overdue" | "upcoming" | "all" = "all") {
   const db = getDb();
   const now = new Date().toISOString();
@@ -532,8 +576,8 @@ export function getAnalyticsData(rangeKey: AnalyticsRangeKey = "7d") {
       `
       SELECT
         (SELECT COUNT(*) FROM targets) as totalTargets,
-        (SELECT COUNT(DISTINCT target_id) FROM threads WHERE last_outbound_at IS NOT NULL) as touchedTargets,
-        (SELECT COUNT(DISTINCT target_id) FROM threads WHERE last_inbound_at IS NOT NULL) as repliedTargets,
+        (SELECT COUNT(*) FROM targets WHERE ${outboundEvidenceSql("targets.id", "targets.source_type")}) as touchedTargets,
+        (SELECT COUNT(*) FROM targets WHERE ${replyEvidenceSql("targets.id")}) as repliedTargets,
         (SELECT COUNT(*) FROM targets WHERE source_type = 'contact_form') as formTargets,
         (SELECT COUNT(*) FROM followup_tasks WHERE status = 'open') as openFollowups,
         (SELECT COUNT(*) FROM followup_tasks WHERE status = 'open' AND due_at <= ?) as dueFollowups,
@@ -557,12 +601,11 @@ export function getAnalyticsData(rangeKey: AnalyticsRangeKey = "7d") {
       `
       SELECT
         targets.source_type as sourceType,
-        COUNT(DISTINCT targets.id) as total,
-        COUNT(DISTINCT CASE WHEN threads.last_outbound_at IS NOT NULL THEN targets.id END) as sent,
-        COUNT(DISTINCT CASE WHEN threads.last_inbound_at IS NOT NULL THEN targets.id END) as replied,
-        COUNT(DISTINCT CASE WHEN targets.status = 'dead' THEN targets.id END) as dead
+        COUNT(*) as total,
+        COUNT(CASE WHEN ${outboundEvidenceSql("targets.id", "targets.source_type")} THEN 1 END) as sent,
+        COUNT(CASE WHEN ${replyEvidenceSql("targets.id")} THEN 1 END) as replied,
+        COUNT(CASE WHEN targets.status = 'dead' THEN 1 END) as dead
       FROM targets
-      LEFT JOIN threads ON threads.target_id = targets.id
       GROUP BY targets.source_type
       ORDER BY total DESC
     `

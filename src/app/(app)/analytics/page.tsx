@@ -32,7 +32,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
   const selectedActivitySeries = getDailyActivitySeriesKeys(params?.activity);
   const data = getAnalyticsData(rangeKey);
   const replyRate = percentage(data.metrics.repliedTargets, data.metrics.touchedTargets);
-  const touchRate = percentage(data.metrics.touchedTargets, data.metrics.totalTargets);
+  const outreachRate = percentage(data.metrics.touchedTargets, data.metrics.totalTargets);
 
   return (
     <>
@@ -59,7 +59,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
         />
         <MetricCard
           icon={Send}
-          label={`Touched (${touchRate})`}
+          label={`Outreached (${outreachRate})`}
           value={data.metrics.touchedTargets}
         />
         <MetricCard
@@ -106,7 +106,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
                 <tr>
                   <th className="px-4 py-3 font-medium">Source</th>
                   <th className="px-4 py-3 font-medium">Targets</th>
-                  <th className="px-4 py-3 font-medium">Sent</th>
+                  <th className="px-4 py-3 font-medium">Outreached</th>
                   <th className="px-4 py-3 font-medium">Replies</th>
                   <th className="px-4 py-3 font-medium">Reply rate</th>
                   <th className="px-4 py-3 font-medium">Dead</th>
