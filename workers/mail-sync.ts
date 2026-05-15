@@ -11,6 +11,10 @@ import {
   normalizeSubject
 } from "../src/modules/mailbox/threading";
 import { getImapFlowOptions, getImapSecurityMode } from "../src/modules/mailbox/imap-client";
+import {
+  completeMailResyncRequests,
+  getPendingMailResyncRequest
+} from "../src/modules/mailbox/resync-requests";
 import { normalizeDomain } from "../src/modules/outreach/dedupe";
 import { getConfiguredSmtpEmailAddresses } from "../src/modules/smtp/from-identities";
 import { sendTelegramMessage } from "../src/modules/telegram/notify";
@@ -56,10 +60,12 @@ async function main() {
 }
 
 async function runMailSync() {
-  const resyncDays = getResyncDays();
+  const pendingResync = getPendingMailResyncRequest();
+  const manualResyncDays = getManualResyncDays();
+  const resyncDays = Math.max(manualResyncDays, pendingResync.days);
 
   console.log(
-    `mail-sync connecting ${env.IMAP_HOST}:${env.IMAP_PORT} security=${getImapSecurityMode()} tlsVerify=${String(env.IMAP_TLS_VERIFY)} resyncDays=${resyncDays || 0}`
+    `mail-sync connecting ${env.IMAP_HOST}:${env.IMAP_PORT} security=${getImapSecurityMode()} tlsVerify=${String(env.IMAP_TLS_VERIFY)} resyncDays=${resyncDays || 0} pendingResyncJobs=${pendingResync.jobIds.length}`
   );
 
   const client = new ImapFlow(getImapFlowOptions());
@@ -70,6 +76,8 @@ async function runMailSync() {
     for (const mailbox of getConfiguredMailboxes()) {
       await importMailbox(client, mailbox, resyncDays);
     }
+
+    completeMailResyncRequests(pendingResync.jobIds);
   } finally {
     await client.logout();
   }
@@ -196,7 +204,7 @@ function getConfiguredMailboxes() {
     .filter(Boolean);
 }
 
-function getResyncDays() {
+function getManualResyncDays() {
   const value = Number(process.env.MAIL_SYNC_RESYNC_DAYS ?? 0);
 
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;

@@ -127,6 +127,7 @@ IMAP_USER=your-bridge-user
 IMAP_PASS=your-bridge-password
 IMAP_MAILBOXES=INBOX,Sent
 IMAP_LOOKBACK_DAYS=90
+IMAP_AUTO_RESYNC_DAYS=90
 ```
 
 Telegram:
@@ -332,6 +333,8 @@ MAIL_SYNC_RESYNC_DAYS=30 npm run worker:mail-resync
 ```
 
 That command searches the configured IMAP mailboxes inside the lookback window and tries to attach missing messages again. Already-imported messages are skipped by unique `messages.message_id`. This is useful when targets were imported after the IMAP cursor had already scanned older mail, or when `IMAP_LOOKBACK_DAYS` was too small on the first sync.
+
+CSV import requests an automatic one-time mail resync when it inserts email targets. The next scheduled `worker:mail-sync` consumes that request and searches the last `IMAP_AUTO_RESYNC_DAYS` days, so new CSV imports can attach existing Proton Sent/INBOX messages without manually running resync.
 
 Audit mail coverage with:
 

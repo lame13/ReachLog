@@ -49,6 +49,7 @@ console.log(`lookback days: ${env.IMAP_LOOKBACK_DAYS}`);
 console.log("");
 
 printCounts();
+printPendingMailResyncJobs();
 printCursors();
 printMailboxMessageCounts();
 printMissingTargetSamples();
@@ -132,6 +133,48 @@ function printCounts() {
   for (const [key, value] of Object.entries(counts)) {
     console.log(`${key}: ${value}`);
   }
+  console.log("");
+}
+
+function printPendingMailResyncJobs() {
+  const rows = sqlite
+    .prepare(
+      `
+      SELECT
+        id,
+        payload_json as payloadJson,
+        run_at as runAt,
+        created_at as createdAt,
+        updated_at as updatedAt
+      FROM jobs
+      WHERE type = 'mail_resync'
+        AND status = 'pending'
+      ORDER BY created_at ASC
+    `
+    )
+    .all() as Array<{
+    id: string;
+    payloadJson: string | null;
+    runAt: string;
+    createdAt: string;
+    updatedAt: string;
+  }>;
+
+  console.log("Pending mail resync jobs");
+
+  if (!rows.length) {
+    console.log("none");
+    console.log("");
+    return;
+  }
+
+  for (const row of rows) {
+    const payload = parsePayload(row.payloadJson);
+    console.log(
+      `${row.id}: days=${payload.days ?? "?"} reasons=${Array.isArray(payload.reasons) ? payload.reasons.join(",") : ""} runAt=${row.runAt}`
+    );
+  }
+
   console.log("");
 }
 

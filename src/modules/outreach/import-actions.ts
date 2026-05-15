@@ -21,6 +21,7 @@ import {
   parseFollowUpDate,
   parseSourceTimestampFromValues
 } from "@/modules/outreach/historical-timestamps";
+import { requestMailResync } from "@/modules/mailbox/resync-requests";
 
 export async function previewCsvImportAction(
   _previousState: ImportActionState,
@@ -69,7 +70,11 @@ export async function commitCsvImportAction(
   try {
     const rows = buildPreviewRows(csvText);
     const importableRows = rows.filter(isImportableRow);
-    const inserted = insertImportRows(importableRows);
+    const result = insertImportRows(importableRows);
+
+    if (result.emailTargetsInserted > 0) {
+      requestMailResync({ reason: "csv_import" });
+    }
 
     revalidatePath("/dashboard");
     revalidatePath("/targets");
@@ -79,8 +84,12 @@ export async function commitCsvImportAction(
     return {
       csvText,
       rows: buildPreviewRows(csvText),
-      summary: summarizeRows(rows, inserted),
-      message: `Imported ${inserted} target${inserted === 1 ? "" : "s"}.`,
+      summary: summarizeRows(rows, result.inserted),
+      message:
+        `Imported ${result.inserted} target${result.inserted === 1 ? "" : "s"}.` +
+        (result.emailTargetsInserted > 0
+          ? " Mail resync will run automatically on the next scheduled mail-sync."
+          : ""),
       error: null
     };
   } catch (error) {
@@ -435,12 +444,13 @@ function checkDatabaseDedupe({
 
 function insertImportRows(rows: ImportPreviewRow[]) {
   if (!rows.length) {
-    return 0;
+    return { inserted: 0, emailTargetsInserted: 0 };
   }
 
   const sqlite = getSqlite();
   const now = new Date().toISOString();
   let inserted = 0;
+  let emailTargetsInserted = 0;
 
   const transaction = sqlite.transaction(() => {
     for (const row of rows) {
@@ -548,11 +558,14 @@ function insertImportRows(rows: ImportPreviewRow[]) {
       }
 
       inserted += 1;
+      if (row.email) {
+        emailTargetsInserted += 1;
+      }
     }
   });
 
   transaction();
-  return inserted;
+  return { inserted, emailTargetsInserted };
 }
 
 function upsertContact({

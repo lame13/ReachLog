@@ -58,6 +58,7 @@ const EnvSchema = z.object({
   IMAP_PASS: z.string().optional(),
   IMAP_MAILBOXES: z.string().default("INBOX,Sent"),
   IMAP_LOOKBACK_DAYS: portFromString(90),
+  IMAP_AUTO_RESYNC_DAYS: portFromString(90),
 
   TELEGRAM_ENABLED: booleanFromString,
   TELEGRAM_BOT_TOKEN: z.string().optional(),
