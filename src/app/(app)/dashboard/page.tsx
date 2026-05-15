@@ -14,6 +14,7 @@ import { getDashboardData, getSendTarget } from "@/modules/outreach/queries";
 import { markDeadAction, snoozeFollowupAction } from "@/modules/followups/actions";
 import { isTargetActionBlocked } from "@/modules/outreach/status";
 import { isEmailVerificationBlocking } from "@/modules/emailVerification/service";
+import { resolveSendAnomalyAction } from "@/modules/smtp/anomaly-actions";
 import { getSendFeedback } from "@/modules/smtp/feedback";
 
 type PageProps = {
@@ -88,6 +89,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
                   <th className="px-4 py-3 font-medium">Status</th>
                   <th className="px-4 py-3 font-medium">Error</th>
                   <th className="px-4 py-3 font-medium">Updated</th>
+                  <th className="px-4 py-3 font-medium">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -108,6 +110,15 @@ export default async function DashboardPage({ searchParams }: PageProps) {
                     </td>
                     <td className="px-4 py-3 text-muted">
                       {formatDateTime(send.updatedAt)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <form action={resolveSendAnomalyAction}>
+                        <input name="outboundSendId" type="hidden" value={send.id} />
+                        <input name="targetId" type="hidden" value={send.targetId} />
+                        <button className="h-9 rounded-md border border-rose-200 px-3 text-xs font-medium text-rose-800 hover:bg-rose-50">
+                          Mark checked
+                        </button>
+                      </form>
                     </td>
                   </tr>
                 ))}
