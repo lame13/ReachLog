@@ -50,6 +50,7 @@ console.log("");
 
 printCounts();
 printPendingMailResyncJobs();
+printSourceMailCoverage();
 printCursors();
 printMailboxMessageCounts();
 printMissingTargetSamples();
@@ -172,6 +173,87 @@ function printPendingMailResyncJobs() {
     const payload = parsePayload(row.payloadJson);
     console.log(
       `${row.id}: days=${payload.days ?? "?"} reasons=${Array.isArray(payload.reasons) ? payload.reasons.join(",") : ""} runAt=${row.runAt}`
+    );
+  }
+
+  console.log("");
+}
+
+function printSourceMailCoverage() {
+  const rows = sqlite
+    .prepare(
+      `
+      SELECT
+        targets.source_type as sourceType,
+        COUNT(*) as targets,
+        COUNT(CASE WHEN contacts.email IS NOT NULL AND contacts.email <> '' THEN 1 END) as emailTargets,
+        COUNT(
+          CASE WHEN EXISTS (
+            SELECT 1
+            FROM threads
+            INNER JOIN messages ON messages.thread_id = threads.id
+            WHERE threads.target_id = targets.id
+          ) THEN 1 END
+        ) as withMessages,
+        COUNT(
+          CASE WHEN EXISTS (
+            SELECT 1
+            FROM threads
+            INNER JOIN messages ON messages.thread_id = threads.id
+            WHERE threads.target_id = targets.id
+              AND messages.direction = 'outbound'
+          ) THEN 1 END
+        ) as withOutbound,
+        COUNT(
+          CASE WHEN contacts.email IS NOT NULL
+            AND contacts.email <> ''
+            AND NOT EXISTS (
+              SELECT 1
+              FROM threads
+              INNER JOIN messages ON messages.thread_id = threads.id
+              WHERE threads.target_id = targets.id
+            )
+          THEN 1 END
+        ) as emailWithoutMessages,
+        COUNT(
+          CASE WHEN contacts.email IS NOT NULL
+            AND contacts.email <> ''
+            AND NOT EXISTS (
+              SELECT 1
+              FROM threads
+              INNER JOIN messages ON messages.thread_id = threads.id
+              WHERE threads.target_id = targets.id
+                AND messages.direction = 'outbound'
+            )
+          THEN 1 END
+        ) as emailWithoutOutbound
+      FROM targets
+      LEFT JOIN contacts ON contacts.id = targets.contact_id
+      GROUP BY targets.source_type
+      ORDER BY emailWithoutOutbound DESC, targets DESC
+    `
+    )
+    .all() as Array<{
+    sourceType: string;
+    targets: number;
+    emailTargets: number;
+    withMessages: number;
+    withOutbound: number;
+    emailWithoutMessages: number;
+    emailWithoutOutbound: number;
+  }>;
+
+  console.log("Mail coverage by source");
+
+  if (!rows.length) {
+    console.log("none");
+    console.log("");
+    return;
+  }
+
+  for (const row of rows) {
+    console.log(
+      `${row.sourceType}: targets=${row.targets} emailTargets=${row.emailTargets} withMessages=${row.withMessages} withOutbound=${row.withOutbound} emailWithoutMessages=${row.emailWithoutMessages} emailWithoutOutbound=${row.emailWithoutOutbound}`
     );
   }
 

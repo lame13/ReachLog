@@ -1,5 +1,6 @@
 export type ImportPreviewResult =
   | "new target"
+  | "repair existing target"
   | "duplicate target"
   | "duplicate contact"
   | "duplicate domain warning"

@@ -72,7 +72,7 @@ export async function commitCsvImportAction(
     const importableRows = rows.filter(isImportableRow);
     const result = insertImportRows(importableRows);
 
-    if (result.emailTargetsInserted > 0) {
+    if (result.emailTargetsTouched > 0) {
       requestMailResync({ reason: "csv_import" });
     }
 
@@ -87,7 +87,10 @@ export async function commitCsvImportAction(
       summary: summarizeRows(rows, result.inserted),
       message:
         `Imported ${result.inserted} target${result.inserted === 1 ? "" : "s"}.` +
-        (result.emailTargetsInserted > 0
+        (result.repaired > 0
+          ? ` Repaired ${result.repaired} existing target${result.repaired === 1 ? "" : "s"}.`
+          : "") +
+        (result.emailTargetsTouched > 0
           ? " Mail resync will run automatically on the next scheduled mail-sync."
           : ""),
       error: null
@@ -222,13 +225,18 @@ function normalizeImportRow(
   const websiteUrl =
     value("website_url", "website", "url") ||
     (!isFormContact && !isThreadContact && contactValueUrl ? contactValueUrl : "");
+  const rawSourceType = value("source_type", "source", "source_group");
+  const channel = value("channel");
   const sourceType = isFormContact
     ? "contact_form"
-    : value("source_type", "source", "source_group", "channel") || "csv";
+    : channel && (!rawSourceType || rawSourceType.toLowerCase() === "csv")
+      ? channel
+      : rawSourceType || channel || "csv";
   const name = value("name", "contact_name");
   const subject = value("subject", "subject_or_form_context");
   const messageText = value(
     "message_text",
+    "body_text",
     "message",
     "body",
     "message_text_or_summary",
@@ -240,13 +248,21 @@ function normalizeImportRow(
   const companyName =
     value("company_name", "company", "account", "target") ||
     (domain ? domain.split(".")[0] : email || "Unknown target");
-  const followUpDate = value("follow_up_date", "followup_date", "next_follow_up");
+  const followUpDate = value(
+    "follow_up_date",
+    "followup_date",
+    "next_follow_up",
+    "follow_up_due_at",
+    "followup_due_at"
+  );
   const sourceTimestamp =
     parseSourceTimestampFromValues(
       value("date_sent"),
       value("date_posted"),
       value("date_updated"),
       value("date_recorded"),
+      value("activity_at"),
+      value("updated_at"),
       messageText,
       notes,
       subject
@@ -401,6 +417,17 @@ function checkDatabaseDedupe({
     };
   }
 
+  if (email && domain) {
+    const recoverable = findRecoverableDomainOnlyTarget({ domain });
+
+    if (recoverable) {
+      return {
+        result: "repair existing target" as const,
+        reason: "Existing domain-only target can be repaired with this email/contact row."
+      };
+    }
+  }
+
   if (email) {
     const contactExists = sqlite
       .prepare("SELECT id FROM contacts WHERE email = ?")
@@ -444,13 +471,14 @@ function checkDatabaseDedupe({
 
 function insertImportRows(rows: ImportPreviewRow[]) {
   if (!rows.length) {
-    return { inserted: 0, emailTargetsInserted: 0 };
+    return { inserted: 0, repaired: 0, emailTargetsTouched: 0 };
   }
 
   const sqlite = getSqlite();
   const now = new Date().toISOString();
   let inserted = 0;
-  let emailTargetsInserted = 0;
+  let repaired = 0;
+  let emailTargetsTouched = 0;
 
   const transaction = sqlite.transaction(() => {
     for (const row of rows) {
@@ -471,6 +499,27 @@ function insertImportRows(rows: ImportPreviewRow[]) {
             now: sourceAt
           })
         : null;
+      const recoverableTarget = row.email
+        ? findRecoverableDomainOnlyTarget({ domain: row.domain })
+        : null;
+      const dueAt = parseFollowUpDate(row.followUpDate);
+
+      if (recoverableTarget) {
+        repairImportedTarget({
+          targetId: recoverableTarget.id,
+          contactId,
+          row,
+          sourceAt,
+          now,
+          dueAt
+        });
+        repaired += 1;
+        if (row.email) {
+          emailTargetsTouched += 1;
+        }
+        continue;
+      }
+
       const targetId = createId("target");
       const status = row.status || (row.sourceType === "contact_form" ? "form submitted" : "new");
 
@@ -531,8 +580,6 @@ function insertImportRows(rows: ImportPreviewRow[]) {
         createTargetEvent(targetId, "form_submitted", row, submittedAt);
       }
 
-      const dueAt = parseFollowUpDate(row.followUpDate);
-
       if (dueAt && shouldCreateImportedFollowup(row)) {
         sqlite
           .prepare(
@@ -559,13 +606,117 @@ function insertImportRows(rows: ImportPreviewRow[]) {
 
       inserted += 1;
       if (row.email) {
-        emailTargetsInserted += 1;
+        emailTargetsTouched += 1;
       }
     }
   });
 
   transaction();
-  return { inserted, emailTargetsInserted };
+  return { inserted, repaired, emailTargetsTouched };
+}
+
+function findRecoverableDomainOnlyTarget({ domain }: { domain: string }) {
+  if (!domain) {
+    return null;
+  }
+
+  return getSqlite()
+    .prepare(
+      `
+      SELECT targets.id
+      FROM targets
+      LEFT JOIN contacts ON contacts.id = targets.contact_id
+      WHERE targets.dedupe_key = ?
+        AND contacts.id IS NULL
+      ORDER BY targets.updated_at DESC
+      LIMIT 1
+    `
+    )
+    .get(domainDedupeKey(domain)) as { id: string } | undefined;
+}
+
+function repairImportedTarget({
+  targetId,
+  contactId,
+  row,
+  sourceAt,
+  now,
+  dueAt
+}: {
+  targetId: string;
+  contactId: string | null;
+  row: ImportPreviewRow;
+  sourceAt: string;
+  now: string;
+  dueAt: string | null;
+}) {
+  const sqlite = getSqlite();
+  const status = row.status || (row.sourceType === "contact_form" ? "form submitted" : "new");
+
+  sqlite
+    .prepare(
+      `
+      UPDATE targets
+      SET contact_id = ?,
+          company_name = ?,
+          website_url = ?,
+          source_type = ?,
+          source_url = ?,
+          dedupe_key = ?,
+          status = ?,
+          do_not_resend = ?,
+          updated_at = ?
+      WHERE id = ?
+    `
+    )
+    .run(
+      contactId,
+      row.companyName,
+      row.websiteUrl || null,
+      row.sourceType,
+      row.sourceUrl || null,
+      row.dedupeKey,
+      status,
+      row.doNotResend ? 1 : 0,
+      sourceAt,
+      targetId
+    );
+
+  sqlite
+    .prepare(
+      `
+      UPDATE followup_tasks
+      SET status = 'cancelled',
+          completed_at = ?
+      WHERE target_id = ?
+        AND status = 'open'
+    `
+    )
+    .run(now, targetId);
+
+  if (dueAt && shouldCreateImportedFollowup(row)) {
+    sqlite
+      .prepare(
+        `
+        INSERT INTO followup_tasks (
+          id, thread_id, target_id, due_at, status, suggested_subject,
+          suggested_body, notification_sent_at, notification_channel,
+          notification_status, completed_at, created_at
+        )
+        VALUES (?, NULL, ?, ?, 'open', ?, ?, NULL, NULL, NULL, NULL, ?)
+      `
+      )
+      .run(
+        createId("followup"),
+        targetId,
+        dueAt,
+        row.subject || `Follow up with ${row.companyName}`,
+        row.messageText || row.nextAction || "Follow up on this outreach.",
+        now
+      );
+  }
+
+  createTargetEvent(targetId, "target_import_repaired", row, now);
 }
 
 function upsertContact({
@@ -675,7 +826,11 @@ function summarizeRows(rows: ImportPreviewRow[], inserted: number) {
 }
 
 function isImportableRow(row: ImportPreviewRow) {
-  return row.result === "new target" || row.result === "duplicate domain warning";
+  return (
+    row.result === "new target" ||
+    row.result === "repair existing target" ||
+    row.result === "duplicate domain warning"
+  );
 }
 
 function parseCsv(csvText: string) {
@@ -727,7 +882,12 @@ function parseCsv(csvText: string) {
 }
 
 function normalizeHeader(header: string) {
-  return header.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  return header
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
 }
 
 function inferDomain(

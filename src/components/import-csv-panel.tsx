@@ -13,6 +13,7 @@ import {
 
 const resultStyles: Record<ImportPreviewResult, string> = {
   "new target": "border-emerald-200 bg-emerald-50 text-emerald-800",
+  "repair existing target": "border-sky-200 bg-sky-50 text-sky-800",
   "duplicate target": "border-gray-200 bg-gray-50 text-gray-700",
   "duplicate contact": "border-gray-200 bg-gray-50 text-gray-700",
   "duplicate domain warning": "border-amber-200 bg-amber-50 text-amber-800",
