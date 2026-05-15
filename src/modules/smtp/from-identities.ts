@@ -20,6 +20,17 @@ export function getSmtpFromOptions() {
   }));
 }
 
+export function getConfiguredSmtpEmailAddresses() {
+  const emails = [
+    ...getConfiguredSmtpFromIdentities().map((identity) => identity.email),
+    extractEmailAddress(env.SMTP_USER ?? "")
+  ]
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean);
+
+  return Array.from(new Set(emails));
+}
+
 export function selectPreferredSmtpFrom(target: {
   companyName?: string | null;
   contactEmail?: string | null;

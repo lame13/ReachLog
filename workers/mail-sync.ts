@@ -12,6 +12,7 @@ import {
 } from "../src/modules/mailbox/threading";
 import { getImapFlowOptions, getImapSecurityMode } from "../src/modules/mailbox/imap-client";
 import { normalizeDomain } from "../src/modules/outreach/dedupe";
+import { getConfiguredSmtpEmailAddresses } from "../src/modules/smtp/from-identities";
 import { sendTelegramMessage } from "../src/modules/telegram/notify";
 
 type TargetMatch = {
@@ -40,6 +41,10 @@ const DOMAIN_FALLBACK_DENYLIST = new Set([
   "fastmail.com",
   "mail.com"
 ]);
+const OWNED_MAILBOX_EMAILS = new Set([
+  ...getConfiguredSmtpEmailAddresses(),
+  env.IMAP_USER?.toLowerCase() ?? ""
+].filter(Boolean));
 
 async function main() {
   if (!env.IMAP_ENABLED) {
@@ -133,8 +138,8 @@ async function importMailbox(client: ImapFlow, mailbox: string, resyncDays: numb
 
       const subject = parsed.subject ?? "(no subject)";
       const normalizedSubject = normalizeSubject(subject);
-      const direction = isSentMailbox(mailbox) ? "outbound" : "inbound";
       const fromEmail = firstAddress(parsed.from) ?? "";
+      const direction = getMessageDirection(mailbox, fromEmail);
       const notification = classifyNonActionableInboundMessage(
         parsed,
         subject,
@@ -1011,6 +1016,21 @@ function rawHeadersJson(parsed: ParsedMail) {
 
 function isSentMailbox(mailbox: string) {
   return mailbox.toLowerCase().includes("sent");
+}
+
+function getMessageDirection(
+  mailbox: string,
+  fromEmail: string
+): "inbound" | "outbound" {
+  if (isSentMailbox(mailbox)) {
+    return "outbound";
+  }
+
+  if (fromEmail && OWNED_MAILBOX_EMAILS.has(fromEmail.toLowerCase())) {
+    return "outbound";
+  }
+
+  return "inbound";
 }
 
 main().catch(async (error) => {
