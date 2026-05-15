@@ -44,6 +44,9 @@ export default async function TargetDetailPage({
 
   const { target, threads, messages, followups, forms, timeline } = detail;
   const tomorrow = getDateInputValue(1);
+  const nextOpenFollowup = followups
+    .filter((followup) => followup.status === "open")
+    .sort((a, b) => a.dueAt.localeCompare(b.dueAt))[0];
 
   return (
     <>
@@ -212,8 +215,50 @@ export default async function TargetDetailPage({
                 <DetailField label="Source" name="sourceType" value={target.sourceType} />
                 <DetailField label="Status" name="status" value={target.status} />
               </div>
+              <DetailField
+                label="Reply type"
+                name="replyType"
+                placeholder="resume_linkedin_requested"
+                value=""
+              />
+              <label className="flex items-start gap-2 rounded-md border border-line bg-panel px-3 py-2 text-sm">
+                <input
+                  className="mt-0.5 size-4 accent-accent"
+                  defaultChecked={Boolean(target.doNotResend)}
+                  name="doNotResend"
+                  type="checkbox"
+                />
+                <span>
+                  <span className="block font-medium">Do not resend</span>
+                  <span className="block text-xs text-muted">
+                    Active/replied statuses stay actionable; dead/bounced/skipped statuses still block sending.
+                  </span>
+                </span>
+              </label>
+              <div className="grid grid-cols-[1fr_110px] gap-3">
+                <DetailField
+                  label="Next follow-up"
+                  name="nextFollowupDate"
+                  type="date"
+                  value={getDateInputPart(nextOpenFollowup?.dueAt)}
+                />
+                <DetailField
+                  label="Time"
+                  name="nextFollowupTime"
+                  type="time"
+                  value={getTimeInputPart(nextOpenFollowup?.dueAt) || "09:00"}
+                />
+              </div>
               <DetailField label="Source URL" name="sourceUrl" type="url" value={target.sourceUrl ?? ""} />
               <DetailField label="Dedupe key" name="dedupeKey" value={target.dedupeKey} />
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-muted">Update note</span>
+                <textarea
+                  className="min-h-24 w-full resize-y rounded-md border border-line px-3 py-2 text-sm outline-none focus:border-accent"
+                  name="note"
+                  placeholder="Founder/CEO requested resume and LinkedIn..."
+                />
+              </label>
               <button className="h-9 rounded-md border border-line px-3 text-xs font-medium hover:bg-panel">
                 Save target
               </button>
@@ -368,13 +413,15 @@ function DetailField({
   name,
   value,
   type = "text",
-  required = false
+  required = false,
+  placeholder
 }: {
   label: string;
   name: string;
   value: string;
   type?: string;
   required?: boolean;
+  placeholder?: string;
 }) {
   return (
     <label className="block">
@@ -383,6 +430,7 @@ function DetailField({
         className="h-9 w-full rounded-md border border-line px-3 text-sm outline-none focus:border-accent"
         defaultValue={value}
         name={name}
+        placeholder={placeholder}
         required={required}
         type={type}
       />
@@ -396,6 +444,38 @@ function getDateInputValue(daysFromNow: number) {
   return date.toISOString().slice(0, 10);
 }
 
+function getDateInputPart(value: string | null | undefined) {
+  if (!value) {
+    return "";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function getTimeInputPart(value: string | null | undefined) {
+  if (!value) {
+    return "";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
 function getEventDetail(payloadJson: string | null) {
   if (!payloadJson) {
     return null;
@@ -405,14 +485,37 @@ function getEventDetail(payloadJson: string | null) {
     const payload = JSON.parse(payloadJson) as Record<string, unknown>;
     const note = typeof payload.note === "string" ? payload.note : null;
     const reason = typeof payload.reason === "string" ? payload.reason : null;
+    const status = typeof payload.status === "string" ? `status: ${payload.status}` : null;
+    const replyType =
+      typeof payload.replyType === "string" && payload.replyType
+        ? `reply type: ${payload.replyType}`
+        : null;
+    const doNotResend =
+      typeof payload.doNotResend === "boolean"
+        ? `do not resend: ${payload.doNotResend ? "on" : "off"}`
+        : null;
     const messageId =
       typeof payload.messageId === "string" ? `message: ${payload.messageId}` : null;
     const dueAt =
       typeof payload.dueAt === "string"
         ? `next follow-up: ${formatDateTime(payload.dueAt)}`
         : null;
+    const nextFollowupAt =
+      typeof payload.nextFollowupAt === "string" && payload.nextFollowupAt
+        ? `next follow-up: ${formatDateTime(payload.nextFollowupAt)}`
+        : null;
+    const lines = [
+      status,
+      replyType,
+      doNotResend,
+      messageId,
+      dueAt,
+      nextFollowupAt,
+      reason,
+      note
+    ].filter(Boolean);
 
-    return note ?? reason ?? messageId ?? dueAt;
+    return lines.length ? lines.join("\n") : null;
   } catch {
     return null;
   }

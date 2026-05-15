@@ -15,6 +15,10 @@ import {
   markContactEmailVerificationPending,
   verifyContactEmailOnce
 } from "@/modules/emailVerification/service";
+import {
+  isDoNotResendHardBlock,
+  isSendBlockedStatus
+} from "@/modules/outreach/status";
 
 type TargetFormValues = {
   targetId?: string;
@@ -27,6 +31,11 @@ type TargetFormValues = {
   sourceUrl: string;
   dedupeKey: string;
   status: string;
+  doNotResend: boolean;
+  replyType: string;
+  nextFollowupDate: string;
+  nextFollowupTime: string;
+  note: string;
 };
 
 export async function createTargetAction(formData: FormData) {
@@ -73,7 +82,7 @@ export async function createTargetAction(formData: FormData) {
           id, contact_id, company_name, website_url, source_type, source_url,
           dedupe_key, status, do_not_resend, created_at, updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `
       )
       .run(
@@ -85,6 +94,7 @@ export async function createTargetAction(formData: FormData) {
         values.sourceUrl || null,
         dedupeKey,
         values.status || "new",
+        values.doNotResend ? 1 : 0,
         now,
         now
       );
@@ -135,6 +145,7 @@ export async function updateTargetAction(formData: FormData) {
   }
 
   let contactIdToVerify: string | null = null;
+  const nextFollowupAt = getNextFollowupIso(values);
 
   const transaction = sqlite.transaction(() => {
     const contactId = upsertContact({
@@ -157,6 +168,7 @@ export async function updateTargetAction(formData: FormData) {
             source_url = ?,
             dedupe_key = ?,
             status = ?,
+            do_not_resend = ?,
             updated_at = ?
         WHERE id = ?
       `
@@ -169,14 +181,103 @@ export async function updateTargetAction(formData: FormData) {
         values.sourceUrl || null,
         dedupeKey,
         values.status || "new",
+        values.doNotResend ? 1 : 0,
         now,
         targetId
       );
 
+    const targetHardBlocked =
+      isSendBlockedStatus(values.status) ||
+      isDoNotResendHardBlock({
+        doNotResend: values.doNotResend,
+        status: values.status
+      });
+    const currentOpenFollowup = sqlite
+      .prepare(
+        `
+        SELECT id, due_at as dueAt
+        FROM followup_tasks
+        WHERE target_id = ?
+          AND status = 'open'
+        ORDER BY due_at ASC
+        LIMIT 1
+      `
+      )
+      .get(targetId) as { id: string; dueAt: string } | undefined;
+    let followupId: string | null = null;
+
+    if (targetHardBlocked) {
+      sqlite
+        .prepare(
+          `
+          UPDATE followup_tasks
+          SET status = 'cancelled',
+              completed_at = ?
+          WHERE target_id = ?
+            AND status = 'open'
+        `
+        )
+        .run(now, targetId);
+    } else if (nextFollowupAt && currentOpenFollowup?.dueAt !== nextFollowupAt) {
+      const latestThread = sqlite
+        .prepare(
+          `
+          SELECT id, subject
+          FROM threads
+          WHERE target_id = ?
+          ORDER BY COALESCE(last_inbound_at, last_outbound_at, updated_at) DESC
+          LIMIT 1
+        `
+        )
+        .get(targetId) as { id: string; subject: string } | undefined;
+
+      sqlite
+        .prepare(
+          `
+          UPDATE followup_tasks
+          SET status = 'cancelled',
+              completed_at = ?
+          WHERE target_id = ?
+            AND status = 'open'
+        `
+        )
+        .run(now, targetId);
+
+      followupId = createId("followup");
+
+      sqlite
+        .prepare(
+          `
+          INSERT INTO followup_tasks (
+            id, thread_id, target_id, due_at, status, suggested_subject,
+            suggested_body, notification_sent_at, notification_channel,
+            notification_status, completed_at, created_at
+          )
+          VALUES (?, ?, ?, ?, 'open', ?, ?, NULL, NULL, NULL, NULL, ?)
+        `
+        )
+        .run(
+          followupId,
+          latestThread?.id ?? null,
+          targetId,
+          nextFollowupAt,
+          latestThread?.subject
+            ? `Re: ${latestThread.subject.replace(/^(?:(?:re|fw|fwd):\s*)+/i, "")}`
+            : null,
+          values.note || null,
+          now
+        );
+    }
+
     insertTargetEvent(targetId, "target_updated", {
       dedupeKey,
       sourceType: values.sourceType,
-      status: values.status
+      status: values.status,
+      doNotResend: values.doNotResend,
+      replyType: values.replyType || null,
+      nextFollowupAt,
+      followupId,
+      note: values.note || null
     });
   });
 
@@ -258,8 +359,23 @@ function getTargetFormValues(formData: FormData): TargetFormValues {
     sourceType: clean(formData.get("sourceType")) || "manual",
     sourceUrl: clean(formData.get("sourceUrl")),
     dedupeKey: clean(formData.get("dedupeKey")),
-    status: clean(formData.get("status")) || "new"
+    status: clean(formData.get("status")) || "new",
+    doNotResend: formData.get("doNotResend") === "on",
+    replyType: clean(formData.get("replyType")),
+    nextFollowupDate: clean(formData.get("nextFollowupDate")),
+    nextFollowupTime: clean(formData.get("nextFollowupTime")) || "09:00",
+    note: clean(formData.get("note"))
   };
+}
+
+function getNextFollowupIso(values: TargetFormValues) {
+  if (!values.nextFollowupDate) {
+    return null;
+  }
+
+  const date = new Date(`${values.nextFollowupDate}T${values.nextFollowupTime || "09:00"}:00`);
+
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
 function upsertContact({

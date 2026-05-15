@@ -422,7 +422,13 @@ function actionableTargetSql(targetAlias: string) {
   const companyName = `lower(COALESCE(${targetAlias}.company_name, ''))`;
 
   return `
-    COALESCE(${targetAlias}.do_not_resend, 0) = 0
+    (
+      COALESCE(${targetAlias}.do_not_resend, 0) = 0
+      OR ${status} LIKE '%active%'
+      OR ${status} LIKE '%hiring_thread%'
+      OR ${status} LIKE '%reply%'
+      OR ${status} LIKE '%replied%'
+    )
     AND ${status} NOT LIKE '%dead%'
     AND ${status} NOT LIKE '%bounced%'
     AND ${status} NOT LIKE '%skipped%'

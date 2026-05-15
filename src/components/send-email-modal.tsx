@@ -4,7 +4,10 @@ import { SendSubmitButton } from "@/components/send-submit-button";
 import { saveDraftAction, sendNowAction } from "@/modules/smtp/actions";
 import { formatDateTime } from "@/modules/core/dates";
 import { createId } from "@/modules/core/ids";
-import { isTargetActionBlocked } from "@/modules/outreach/status";
+import {
+  isDoNotResendHardBlock,
+  isTargetActionBlocked
+} from "@/modules/outreach/status";
 import { isEmailVerificationBlocking } from "@/modules/emailVerification/service";
 import {
   getSmtpFromOptions,
@@ -52,14 +55,16 @@ export function SendEmailModal({
   const blockedEmailVerification = isEmailVerificationBlocking(
     target.emailVerificationStatus
   );
+  const blockedDoNotResend = isDoNotResendHardBlock(target);
+  const blockedTarget = isTargetActionBlocked(target);
   const canSend =
     Boolean(target.contactEmail) &&
-    !isTargetActionBlocked(target) &&
+    !blockedTarget &&
     !blockedEmailVerification;
   const cannotSendMessage = getCannotSendMessage({
     hasEmail: Boolean(target.contactEmail),
-    doNotResend: target.doNotResend,
-    targetBlocked: isTargetActionBlocked(target),
+    doNotResend: blockedDoNotResend,
+    targetBlocked: blockedTarget,
     emailVerificationBlocked: blockedEmailVerification,
     emailVerificationStatus: target.emailVerificationStatus
   });
@@ -176,6 +181,9 @@ export function SendEmailModal({
               <div>Email verification error: {target.emailVerificationError}</div>
             )}
             <div>Do not resend: {target.doNotResend ? "on" : "off"}</div>
+            {target.doNotResend && !blockedDoNotResend && (
+              <div>Do not resend is treated as dedupe-only for this active/replied thread.</div>
+            )}
           </div>
 
           <div className="grid gap-3 rounded-md border border-line p-3 sm:grid-cols-[1fr_120px]">
@@ -236,7 +244,7 @@ function getCannotSendMessage({
   }
 
   if (doNotResend) {
-    return "Send is disabled because this target is marked Do Not Resend.";
+    return "Send is disabled because this target is marked Do Not Resend and is not an active/replied thread.";
   }
 
   if (targetBlocked) {

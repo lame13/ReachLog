@@ -12,7 +12,7 @@ import { StatusPill } from "@/components/status-pill";
 import { formatDateTime, timeAgo } from "@/modules/core/dates";
 import { getDashboardData, getSendTarget } from "@/modules/outreach/queries";
 import { markDeadAction, snoozeFollowupAction } from "@/modules/followups/actions";
-import { isSendBlockedStatus } from "@/modules/outreach/status";
+import { isTargetActionBlocked } from "@/modules/outreach/status";
 import { isEmailVerificationBlocking } from "@/modules/emailVerification/service";
 import { getSendFeedback } from "@/modules/smtp/feedback";
 
@@ -177,8 +177,14 @@ export default async function DashboardPage({ searchParams }: PageProps) {
               {data.followups.map((followup) => {
                 const canSend =
                   Boolean(followup.contactEmail) &&
-                  !followup.doNotResend &&
-                  !isSendBlockedStatus(followup.targetStatus) &&
+                  !isTargetActionBlocked({
+                    companyName: followup.companyName,
+                    dedupeKey: followup.dedupeKey,
+                    doNotResend: followup.doNotResend,
+                    sourceType: followup.sourceType,
+                    sourceUrl: followup.sourceUrl,
+                    status: followup.targetStatus
+                  }) &&
                   !isEmailVerificationBlocking(followup.emailVerificationStatus);
 
                 return (

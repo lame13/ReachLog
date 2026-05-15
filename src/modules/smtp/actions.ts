@@ -8,6 +8,7 @@ import { getSqlite } from "@/modules/core/db/client";
 import { createId } from "@/modules/core/ids";
 import { normalizeSubject } from "@/modules/mailbox/threading";
 import {
+  isDoNotResendHardBlock,
   isNonActionablePlatformTarget,
   isSendBlockedStatus,
   isTargetActionBlocked
@@ -56,6 +57,7 @@ export async function sendNowAction(formData: FormData) {
 
   const blockedStatus = isSendBlockedStatus(target?.status);
   const blockedPlatform = target ? isNonActionablePlatformTarget(target) : false;
+  const blockedDoNotResend = target ? isDoNotResendHardBlock(target) : false;
   const blockedTarget = target ? isTargetActionBlocked(target) : false;
   const blockedEmailVerification = isEmailVerificationBlocking(
     target?.emailVerificationStatus
@@ -67,7 +69,7 @@ export async function sendNowAction(formData: FormData) {
     blockedEmailVerification
   ) {
     createTargetEvent(targetId, "send_blocked", {
-      reason: target?.doNotResend
+      reason: blockedDoNotResend
         ? "do_not_resend"
         : blockedStatus
           ? "blocked_status"
@@ -87,7 +89,7 @@ export async function sendNowAction(formData: FormData) {
       "error",
       getSendBlockedMessage({
         hasContactEmail: Boolean(target?.contactEmail),
-        doNotResend: Boolean(target?.doNotResend),
+        doNotResend: blockedDoNotResend,
         blockedStatus,
         blockedPlatform,
         blockedEmailVerification,
@@ -615,7 +617,7 @@ function getSendBlockedMessage({
   }
 
   if (doNotResend) {
-    return "This target is marked Do Not Resend.";
+    return "This target is marked Do Not Resend and is not an active/replied thread.";
   }
 
   if (blockedStatus) {

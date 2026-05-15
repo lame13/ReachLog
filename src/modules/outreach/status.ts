@@ -37,6 +37,24 @@ export function isNonActionablePlatformTarget(target: {
   );
 }
 
+export function isActiveThreadStatus(status: string | null | undefined) {
+  const normalized = (status ?? "").toLowerCase();
+
+  return (
+    normalized.includes("active") ||
+    normalized.includes("hiring_thread") ||
+    normalized.includes("reply") ||
+    normalized.includes("replied")
+  );
+}
+
+export function isDoNotResendHardBlock(target: {
+  doNotResend?: boolean | number | null;
+  status?: string | null;
+}) {
+  return Boolean(target.doNotResend) && !isActiveThreadStatus(target.status);
+}
+
 export function isTargetActionBlocked(target: {
   companyName?: string | null;
   dedupeKey?: string | null;
@@ -46,7 +64,7 @@ export function isTargetActionBlocked(target: {
   status?: string | null;
 }) {
   return (
-    Boolean(target.doNotResend) ||
+    isDoNotResendHardBlock(target) ||
     isSendBlockedStatus(target.status) ||
     isNonActionablePlatformTarget(target)
   );
