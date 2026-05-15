@@ -333,6 +333,14 @@ MAIL_SYNC_RESYNC_DAYS=30 npm run worker:mail-resync
 
 That command searches the configured IMAP mailboxes inside the lookback window and tries to attach missing messages again. Already-imported messages are skipped by unique `messages.message_id`. This is useful when targets were imported after the IMAP cursor had already scanned older mail, or when `IMAP_LOOKBACK_DAYS` was too small on the first sync.
 
+Audit mail coverage with:
+
+```bash
+npm run prod:mail-sync-audit
+```
+
+The audit prints cursor state, imported message counts by mailbox, email targets with zero imported messages, and unlinked mail events that now match known contact emails.
+
 Threading behavior:
 
 - Uses `Message-ID`, `In-Reply-To`, and `References` first.
