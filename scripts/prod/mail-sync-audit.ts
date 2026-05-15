@@ -24,6 +24,10 @@ type UnlinkedEventRow = {
   payloadJson: string | null;
   createdAt: string;
 };
+type ParsedUnlinkedEvent = UnlinkedEventRow & {
+  messageId: string;
+  payload: Record<string, unknown>;
+};
 type ContactRow = {
   targetId: string;
   companyName: string;
@@ -31,6 +35,11 @@ type ContactRow = {
 };
 
 const sqlite = getSqlite();
+const importedMessageIds = loadImportedMessageIds();
+const unlinkedEvents = loadUnlinkedEvents();
+const unresolvedUnlinkedEvents = unlinkedEvents.filter(
+  (event) => event.messageId && !importedMessageIds.has(event.messageId)
+);
 
 console.log("Mail sync audit");
 console.log(`database: ${env.DATABASE_PATH}`);
@@ -115,7 +124,8 @@ function printCounts() {
     threads: scalar("SELECT COUNT(*) as count FROM threads"),
     unlinkedMailEvents: scalar(
       "SELECT COUNT(*) as count FROM events WHERE event_type = 'mail_seen_unlinked'"
-    )
+    ),
+    unresolvedUnlinkedMailEvents: unresolvedUnlinkedEvents.length
   };
 
   console.log("Counts");
@@ -240,32 +250,7 @@ function printMissingTargetSamples() {
 }
 
 function printUnlinkedMailSummary() {
-  const byMailbox = sqlite
-    .prepare(
-      `
-      SELECT entity_id as mailbox, COUNT(*) as count
-      FROM events
-      WHERE event_type = 'mail_seen_unlinked'
-      GROUP BY entity_id
-      ORDER BY count DESC
-    `
-    )
-    .all() as Array<{ mailbox: string; count: number }>;
-  const events = sqlite
-    .prepare(
-      `
-      SELECT
-        id,
-        entity_id as mailbox,
-        payload_json as payloadJson,
-        created_at as createdAt
-      FROM events
-      WHERE event_type = 'mail_seen_unlinked'
-      ORDER BY created_at DESC
-      LIMIT 5000
-    `
-    )
-    .all() as UnlinkedEventRow[];
+  const byMailbox = countUnresolvedUnlinkedByMailbox();
   const contacts = sqlite
     .prepare(
       `
@@ -282,8 +267,8 @@ function printUnlinkedMailSummary() {
     .all() as ContactRow[];
   const exactMatches: string[] = [];
 
-  for (const event of events) {
-    const payload = parsePayload(event.payloadJson);
+  for (const event of unresolvedUnlinkedEvents) {
+    const payload = event.payload;
     const text = `${payload.from ?? ""} ${payload.to ?? ""}`.toLowerCase();
 
     if (!text) {
@@ -303,7 +288,7 @@ function printUnlinkedMailSummary() {
     }
   }
 
-  console.log("Unlinked mail events by mailbox");
+  console.log("Unresolved unlinked mail events by mailbox");
 
   if (!byMailbox.length) {
     console.log("none");
@@ -314,7 +299,7 @@ function printUnlinkedMailSummary() {
   }
 
   console.log("");
-  console.log("Sample unlinked events that now match a known contact email");
+  console.log("Sample unresolved unlinked events that now match a known contact email");
 
   if (!exactMatches.length) {
     console.log("none");
@@ -331,6 +316,53 @@ function scalar(query: string) {
   return (sqlite.prepare(query).get() as CountRow).count;
 }
 
+function loadImportedMessageIds() {
+  const rows = sqlite
+    .prepare("SELECT message_id as messageId FROM messages")
+    .all() as Array<{ messageId: string }>;
+
+  return new Set(rows.map((row) => row.messageId));
+}
+
+function loadUnlinkedEvents() {
+  const rows = sqlite
+    .prepare(
+      `
+      SELECT
+        id,
+        entity_id as mailbox,
+        payload_json as payloadJson,
+        created_at as createdAt
+      FROM events
+      WHERE event_type = 'mail_seen_unlinked'
+      ORDER BY created_at DESC
+    `
+    )
+    .all() as UnlinkedEventRow[];
+
+  return rows.map((row): ParsedUnlinkedEvent => {
+    const payload = parsePayload(row.payloadJson);
+
+    return {
+      ...row,
+      messageId: normalizeString(payload.messageId),
+      payload
+    };
+  });
+}
+
+function countUnresolvedUnlinkedByMailbox() {
+  const counts = new Map<string, number>();
+
+  for (const event of unresolvedUnlinkedEvents) {
+    counts.set(event.mailbox, (counts.get(event.mailbox) ?? 0) + 1);
+  }
+
+  return Array.from(counts.entries())
+    .map(([mailbox, count]) => ({ mailbox, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
 function parsePayload(value: string | null) {
   if (!value) {
     return {} as Record<string, unknown>;
@@ -341,4 +373,8 @@ function parsePayload(value: string | null) {
   } catch {
     return {} as Record<string, unknown>;
   }
+}
+
+function normalizeString(value: unknown) {
+  return typeof value === "string" ? value : "";
 }

@@ -874,7 +874,25 @@ function createUnlinkedMailEvent({
   subject: string;
   normalizedSubject: string;
 }) {
-  getSqlite()
+  const sqlite = getSqlite();
+  const alreadyLogged = sqlite
+    .prepare(
+      `
+      SELECT id
+      FROM events
+      WHERE event_type = 'mail_seen_unlinked'
+        AND json_valid(payload_json)
+        AND json_extract(payload_json, '$.messageId') = ?
+      LIMIT 1
+    `
+    )
+    .get(messageId);
+
+  if (alreadyLogged) {
+    return;
+  }
+
+  sqlite
     .prepare(
       "INSERT INTO events (id, entity_type, entity_id, event_type, payload_json, created_at) VALUES (?, 'mailbox', ?, 'mail_seen_unlinked', ?, ?)"
     )
