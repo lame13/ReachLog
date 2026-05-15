@@ -325,6 +325,14 @@ Body/follow-up behavior:
 
 `worker:mail-sync` imports from Proton Bridge IMAP.
 
+Normal sync uses mailbox cursors and only imports new UIDs after the first run. For a one-off historical pass, use:
+
+```bash
+MAIL_SYNC_RESYNC_DAYS=30 npm run worker:mail-resync
+```
+
+That command searches the configured IMAP mailboxes inside the lookback window and tries to attach missing messages again. Already-imported messages are skipped by unique `messages.message_id`. This is useful when targets were imported after the IMAP cursor had already scanned older mail, or when `IMAP_LOOKBACK_DAYS` was too small on the first sync.
+
 Threading behavior:
 
 - Uses `Message-ID`, `In-Reply-To`, and `References` first.
@@ -478,6 +486,7 @@ Run these from Forge scheduled jobs, cron, or systemd timers:
 
 ```bash
 npm run worker:mail-sync
+npm run worker:mail-resync
 npm run worker:followup-check
 npm run worker:email-verify
 npm run worker:backup

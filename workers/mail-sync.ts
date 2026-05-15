@@ -51,8 +51,10 @@ async function main() {
 }
 
 async function runMailSync() {
+  const resyncDays = getResyncDays();
+
   console.log(
-    `mail-sync connecting ${env.IMAP_HOST}:${env.IMAP_PORT} security=${getImapSecurityMode()} tlsVerify=${String(env.IMAP_TLS_VERIFY)}`
+    `mail-sync connecting ${env.IMAP_HOST}:${env.IMAP_PORT} security=${getImapSecurityMode()} tlsVerify=${String(env.IMAP_TLS_VERIFY)} resyncDays=${resyncDays || 0}`
   );
 
   const client = new ImapFlow(getImapFlowOptions());
@@ -61,14 +63,14 @@ async function runMailSync() {
 
   try {
     for (const mailbox of getConfiguredMailboxes()) {
-      await importMailbox(client, mailbox);
+      await importMailbox(client, mailbox, resyncDays);
     }
   } finally {
     await client.logout();
   }
 }
 
-async function importMailbox(client: ImapFlow, mailbox: string) {
+async function importMailbox(client: ImapFlow, mailbox: string, resyncDays: number) {
   const sqlite = getSqlite();
   const lock = await client.getMailboxLock(mailbox);
   let imported = 0;
@@ -79,12 +81,17 @@ async function importMailbox(client: ImapFlow, mailbox: string) {
     const cursor = getMailboxCursor(mailbox, uidValidity);
     const uidNext = client.mailbox ? client.mailbox.uidNext : null;
 
-    if (uidNext && cursor.lastUid >= uidNext - 1) {
+    if (!resyncDays && uidNext && cursor.lastUid >= uidNext - 1) {
       console.log(`mail-sync ${mailbox}: no new messages`);
       return;
     }
 
-    const fetchRange = await getFetchRange(client, cursor.lastUid, uidNext);
+    const fetchRange = await getFetchRange(
+      client,
+      resyncDays ? 0 : cursor.lastUid,
+      uidNext,
+      resyncDays
+    );
 
     if (!fetchRange) {
       console.log(`mail-sync ${mailbox}: no messages in lookback window`);
@@ -184,11 +191,27 @@ function getConfiguredMailboxes() {
     .filter(Boolean);
 }
 
+function getResyncDays() {
+  const value = Number(process.env.MAIL_SYNC_RESYNC_DAYS ?? 0);
+
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
+}
+
 async function getFetchRange(
   client: ImapFlow,
   lastUid: number,
-  uidNext: number | null
+  uidNext: number | null,
+  resyncDays: number
 ) {
+  if (resyncDays > 0) {
+    const since = new Date();
+    since.setDate(since.getDate() - resyncDays);
+
+    const uids = await client.search({ since }, { uid: true });
+
+    return uids && uids.length > 0 ? uids : null;
+  }
+
   if (lastUid > 0) {
     return `${lastUid + 1}:*`;
   }
