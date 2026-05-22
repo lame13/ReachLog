@@ -102,6 +102,64 @@ export async function sendNowAction(formData: FormData) {
   const messageId = createLocalMessageId(fromEmail);
   const replyToMessageId = target.lastMessageId ?? target.firstMessageId ?? undefined;
 
+  if (env.DEMO_MODE) {
+    const outboundSendId = createPendingOutboundSend({
+      target,
+      contactEmail,
+      subject,
+      body,
+      fromEmail,
+      messageId,
+      sendKey
+    });
+
+    if (!outboundSendId.inserted) {
+      createTargetEvent(targetId, "send_duplicate_blocked", {
+        sendKey,
+        outboundSendId: outboundSendId.id,
+        subject,
+        demoMode: true
+      });
+      revalidateAfterSend(targetId);
+      redirectWithSendFeedback(
+        returnTo,
+        targetId,
+        "info",
+        "This send was already submitted. Duplicate send was blocked."
+      );
+    }
+
+    persistSentEmail({
+      target: { ...target, contactEmail },
+      subject,
+      body,
+      fromEmail,
+      messageId,
+      replyToMessageId,
+      outboundSendId: outboundSendId.id,
+      rawResult: {
+        accepted: [contactEmail],
+        rejected: [],
+        response: "demo_mode"
+      } as nodemailer.SentMessageInfo,
+      createFollowup,
+      followupDays
+    });
+    createTargetEvent(targetId, "demo_email_simulated", {
+      from: fromEmail,
+      to: contactEmail,
+      messageId,
+      subject
+    });
+    revalidateAfterSend(targetId);
+    redirectWithSendFeedback(
+      returnTo,
+      targetId,
+      "success",
+      "Demo mode: email send was simulated. Nothing was sent."
+    );
+  }
+
   if (!env.SMTP_ENABLED) {
     createTargetEvent(targetId, "send_blocked", {
       reason: "smtp_disabled",

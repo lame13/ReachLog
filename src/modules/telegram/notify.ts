@@ -1,6 +1,11 @@
 import { env } from "../core/env";
 
 export async function sendTelegramMessage(text: string) {
+  if (env.DEMO_MODE) {
+    console.log(`telegram demo skip: ${text.slice(0, 120)}`);
+    return { sent: false, reason: "demo_mode" };
+  }
+
   if (!env.TELEGRAM_ENABLED || !env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID) {
     return { sent: false, reason: "telegram_disabled" };
   }

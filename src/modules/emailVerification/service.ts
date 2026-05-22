@@ -140,6 +140,28 @@ async function verifyAndStoreContactEmail({
 }) {
   const now = new Date().toISOString();
 
+  if (env.DEMO_MODE) {
+    storeVerificationResult({
+      contactId,
+      status: "ok",
+      checkedAt: now,
+      error: null,
+      raw: "demo_mode",
+      now
+    });
+
+    if (targetId) {
+      insertTargetEvent(targetId, "email_verified", {
+        provider: PROVIDER,
+        email,
+        status: "ok",
+        demoMode: true
+      });
+    }
+
+    return { checked: true, status: "ok", error: null };
+  }
+
   if (!env.EMAILLISTVERIFY_ENABLED) {
     return { checked: false, reason: "emaillistverify_disabled" };
   }

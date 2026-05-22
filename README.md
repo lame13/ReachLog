@@ -66,6 +66,17 @@ Local SQLite defaults to:
 .data/app.sqlite
 ```
 
+Run a local demo database:
+
+```bash
+npm run demo:reset
+npm run demo:dev
+```
+
+Demo mode uses `.data/demo.sqlite`, seeds sample outreach data, shows a demo
+banner, simulates email sends into the database, and skips real SMTP, IMAP,
+Telegram, EmailListVerify, and backup side effects.
+
 Copy env examples as needed:
 
 ```bash
@@ -81,9 +92,30 @@ Core:
 ```text
 TZ=Asia/Bangkok
 APP_URL=https://reachlog-pzjckw1w.on-forge.com
+DEMO_MODE=false
 DATABASE_PATH=/home/reach-log/reachlog-pzjckw1w.on-forge.com/shared/data/app.sqlite
 BACKUP_DIR=/home/reach-log/reachlog-pzjckw1w.on-forge.com/shared/data/backups
 SEED_DEMO_DATA=false
+```
+
+Public demo:
+
+```text
+DEMO_MODE=true
+DATABASE_PATH=/home/reach-log/reachlog-pzjckw1w.on-forge.com/shared/demo/app.sqlite
+BACKUP_DIR=/home/reach-log/reachlog-pzjckw1w.on-forge.com/shared/demo/backups
+SEED_DEMO_DATA=true
+APP_BASIC_AUTH_ENABLED=false
+SMTP_ENABLED=false
+IMAP_ENABLED=false
+TELEGRAM_ENABLED=false
+EMAILLISTVERIFY_ENABLED=false
+```
+
+Reset the demo data when needed:
+
+```bash
+npm run demo:reset
 ```
 
 Single-owner auth:

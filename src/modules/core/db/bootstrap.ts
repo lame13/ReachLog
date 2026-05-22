@@ -207,7 +207,7 @@ export function bootstrapDatabase(sqlite: SqliteDatabase) {
     return;
   }
 
-  if (!env.SEED_DEMO_DATA) {
+  if (!env.SEED_DEMO_DATA && !env.DEMO_MODE) {
     ensureModuleSettings(sqlite);
     return;
   }

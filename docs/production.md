@@ -135,6 +135,7 @@ NODE_ENV=production
 TZ=Asia/Bangkok
 PORT=3007
 APP_URL=https://reachlog-pzjckw1w.on-forge.com
+DEMO_MODE=false
 DATABASE_PATH=/home/reach-log/reachlog-pzjckw1w.on-forge.com/shared/data/app.sqlite
 BACKUP_DIR=/home/reach-log/reachlog-pzjckw1w.on-forge.com/shared/data/backups
 B2_REMOTE=b2:your-bucket/outreach-crm/
@@ -173,6 +174,23 @@ EMAILLISTVERIFY_API_KEY=
 EMAILLISTVERIFY_TIMEOUT_MS=15000
 EMAILLISTVERIFY_BATCH_SIZE=25
 ```
+
+For a public demo site, use a separate database path and enable demo mode:
+
+```text
+DEMO_MODE=true
+DATABASE_PATH=/home/reach-log/reachlog-pzjckw1w.on-forge.com/shared/demo/app.sqlite
+BACKUP_DIR=/home/reach-log/reachlog-pzjckw1w.on-forge.com/shared/demo/backups
+SEED_DEMO_DATA=true
+APP_BASIC_AUTH_ENABLED=false
+SMTP_ENABLED=false
+IMAP_ENABLED=false
+TELEGRAM_ENABLED=false
+EMAILLISTVERIFY_ENABLED=false
+```
+
+`DEMO_MODE=true` forces external integrations off even if their module flags are
+accidentally enabled. Email sends are saved as simulated messages only.
 
 `IMAP_SECURITY` can be `plain`, `starttls`, `tls`, or `auto`. For Proton
 Bridge on localhost, start with `starttls` and `IMAP_TLS_VERIFY=false`. The old

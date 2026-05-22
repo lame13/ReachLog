@@ -51,6 +51,11 @@ const OWNED_MAILBOX_EMAILS = new Set([
 ].filter(Boolean));
 
 async function main() {
+  if (env.DEMO_MODE) {
+    console.log("mail-sync skipped: DEMO_MODE=true");
+    return;
+  }
+
   if (!env.IMAP_ENABLED) {
     console.log("mail-sync skipped: IMAP_ENABLED=false");
     return;

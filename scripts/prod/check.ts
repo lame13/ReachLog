@@ -10,12 +10,17 @@ type Check = {
 };
 
 const checks: Check[] = [
+  checkDemoDatabasePath(),
   checkWritablePath("DATABASE_PATH parent", dirname(resolve(env.DATABASE_PATH))),
   checkWritableFileOrParent("DATABASE_PATH", resolve(env.DATABASE_PATH)),
   checkWritablePath("BACKUP_DIR", resolve(env.BACKUP_DIR)),
-  checkCommand("sqlite3"),
-  checkCommand("gzip"),
-  env.B2_REMOTE ? checkCommand("rclone") : pass("rclone", "skipped because B2_REMOTE is empty"),
+  env.DEMO_MODE ? pass("sqlite3", "skipped in demo mode") : checkCommand("sqlite3"),
+  env.DEMO_MODE ? pass("gzip", "skipped in demo mode") : checkCommand("gzip"),
+  env.DEMO_MODE
+    ? pass("rclone", "skipped in demo mode")
+    : env.B2_REMOTE
+      ? checkCommand("rclone")
+      : pass("rclone", "skipped because B2_REMOTE is empty"),
   checkProductionAuth(),
   checkSeedMode(),
   checkSmtpConfig(),
@@ -44,6 +49,26 @@ function pass(label: string, detail?: string): Check {
 
 function fail(label: string, detail: string): Check {
   return { label, ok: false, detail };
+}
+
+function checkDemoDatabasePath(): Check {
+  if (!env.DEMO_MODE) {
+    return pass("DEMO_MODE", "false");
+  }
+
+  if (
+    env.DATABASE_PATH.includes("/demo/") ||
+    env.DATABASE_PATH.includes(".data/demo") ||
+    env.DATABASE_PATH.endsWith("/demo.sqlite") ||
+    env.DATABASE_PATH.endsWith("\\demo.sqlite")
+  ) {
+    return pass("DEMO_MODE", `true using ${env.DATABASE_PATH}`);
+  }
+
+  return fail(
+    "DEMO_MODE",
+    `true but DATABASE_PATH does not look like a demo database: ${env.DATABASE_PATH}`
+  );
 }
 
 function checkWritablePath(label: string, path: string): Check {
@@ -90,6 +115,10 @@ function checkCommand(command: string): Check {
 }
 
 function checkProductionAuth(): Check {
+  if (env.DEMO_MODE) {
+    return pass("Basic Auth", "not required for demo mode");
+  }
+
   if (process.env.NODE_ENV !== "production") {
     return pass("Basic Auth", "not enforced because NODE_ENV is not production");
   }
@@ -110,6 +139,10 @@ function checkProductionAuth(): Check {
 }
 
 function checkSeedMode(): Check {
+  if (env.DEMO_MODE) {
+    return pass("SEED_DEMO_DATA", "demo mode seeds sample data");
+  }
+
   if (env.SEED_DEMO_DATA) {
     return fail("SEED_DEMO_DATA", "must be false before production import");
   }
@@ -118,6 +151,10 @@ function checkSeedMode(): Check {
 }
 
 function checkSmtpConfig(): Check {
+  if (env.DEMO_MODE) {
+    return pass("SMTP config", "disabled by demo mode");
+  }
+
   if (!env.SMTP_ENABLED) {
     return pass("SMTP config", "disabled");
   }
@@ -139,6 +176,10 @@ function checkSmtpConfig(): Check {
 }
 
 function checkImapConfig(): Check {
+  if (env.DEMO_MODE) {
+    return pass("IMAP config", "disabled by demo mode");
+  }
+
   if (!env.IMAP_ENABLED) {
     return pass("IMAP config", "disabled");
   }
@@ -159,6 +200,10 @@ function checkImapConfig(): Check {
 }
 
 function checkEmailListVerifyConfig(): Check {
+  if (env.DEMO_MODE) {
+    return pass("EmailListVerify config", "disabled by demo mode");
+  }
+
   if (!env.EMAILLISTVERIFY_ENABLED) {
     return pass("EmailListVerify config", "disabled");
   }

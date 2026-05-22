@@ -4,12 +4,21 @@ import { z } from "zod";
 process.env.TZ ||= "Asia/Bangkok";
 
 const forgeAppRoot = "/home/reach-log/reachlog-pzjckw1w.on-forge.com";
+const demoModeFromEnv = process.env.DEMO_MODE === "true";
 const isForgeAppPath = process.cwd().startsWith(forgeAppRoot);
 const usesForgeDefaults = process.env.NODE_ENV === "production" || isForgeAppPath;
-const defaultDatabasePath = usesForgeDefaults
+const defaultDatabasePath = demoModeFromEnv
+  ? usesForgeDefaults
+    ? `${forgeAppRoot}/shared/demo/app.sqlite`
+    : ".data/demo.sqlite"
+  : usesForgeDefaults
   ? `${forgeAppRoot}/shared/data/app.sqlite`
   : ".data/app.sqlite";
-const defaultBackupDir = usesForgeDefaults
+const defaultBackupDir = demoModeFromEnv
+  ? usesForgeDefaults
+    ? `${forgeAppRoot}/shared/demo/backups`
+    : ".data/demo-backups"
+  : usesForgeDefaults
   ? `${forgeAppRoot}/shared/data/backups`
   : ".data/backups";
 const defaultAppUrl = usesForgeDefaults
@@ -31,6 +40,7 @@ const portFromString = (fallback: number) =>
 const EnvSchema = z.object({
   TZ: z.string().default("Asia/Bangkok"),
   APP_URL: z.string().default(defaultAppUrl),
+  DEMO_MODE: booleanFromString,
   DATABASE_PATH: z.string().default(defaultDatabasePath),
   SEED_DEMO_DATA: booleanFromString,
 

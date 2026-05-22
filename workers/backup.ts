@@ -7,6 +7,11 @@ import { withWorkerLock } from "../src/modules/core/db/locks";
 import { notifyWorkerFailure } from "../src/modules/core/worker-alerts";
 
 async function main() {
+  if (env.DEMO_MODE) {
+    console.log("backup skipped: DEMO_MODE=true");
+    return;
+  }
+
   await withWorkerLock("backup", 1800, runBackup);
 }
 

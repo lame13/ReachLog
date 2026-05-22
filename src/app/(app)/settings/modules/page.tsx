@@ -99,6 +99,13 @@ function getTelegramTestMessage(status: string | undefined, reason: string | und
     return { sent: true, message: "Telegram test sent." };
   }
 
+  if (status === "demo" || reason === "demo_mode") {
+    return {
+      sent: true,
+      message: "Demo mode: Telegram test was simulated."
+    };
+  }
+
   return {
     sent: false,
     message: `Telegram test failed: ${reason || "unknown_error"}`

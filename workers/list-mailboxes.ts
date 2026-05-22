@@ -3,6 +3,11 @@ import { env } from "../src/modules/core/env";
 import { getImapFlowOptions, getImapSecurityMode } from "../src/modules/mailbox/imap-client";
 
 async function main() {
+  if (env.DEMO_MODE) {
+    console.log("list-mailboxes skipped: DEMO_MODE=true");
+    return;
+  }
+
   if (!env.IMAP_ENABLED) {
     console.log("list-mailboxes skipped: IMAP_ENABLED=false");
     return;

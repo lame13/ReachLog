@@ -22,6 +22,15 @@ export async function updateModuleSettingAction(formData: FormData) {
 }
 
 export async function sendTelegramTestAction() {
+  if (process.env.DEMO_MODE === "true") {
+    const params = new URLSearchParams({
+      telegramTest: "demo",
+      reason: "demo_mode"
+    });
+
+    redirect(`/settings/modules?${params.toString()}`);
+  }
+
   const result = await sendTelegramMessage(
     `ReachLog Telegram test\n${new Date().toISOString()}\n${appUrl("/dashboard")}`
   );

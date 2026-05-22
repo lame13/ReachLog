@@ -15,6 +15,11 @@ type DueFollowup = {
 };
 
 async function main() {
+  if (env.DEMO_MODE) {
+    console.log("followup-check skipped: DEMO_MODE=true");
+    return;
+  }
+
   await withWorkerLock("followup-check", 120, checkFollowups);
 }
 

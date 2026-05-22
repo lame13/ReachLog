@@ -14,6 +14,8 @@
     "prod:mail-sync-audit": "tsx scripts/prod/mail-sync-audit.ts",
     "prod:backfill-source-timestamps": "tsx scripts/prod/backfill-source-timestamps.ts",
     "prod:backfill-mail-event-timestamps": "tsx scripts/prod/backfill-mail-event-timestamps.ts",
+    "demo:reset": "DEMO_MODE=true SEED_DEMO_DATA=true tsx scripts/demo/reset.ts",
+    "demo:dev": "DEMO_MODE=true SEED_DEMO_DATA=true DATABASE_PATH=.data/demo.sqlite npm run dev",
     "worker:mail-sync": "tsx workers/mail-sync.ts",
     "worker:mail-resync": "MAIL_SYNC_RESYNC_DAYS=${MAIL_SYNC_RESYNC_DAYS:-30} tsx workers/mail-sync.ts",
     "worker:list-mailboxes": "tsx workers/list-mailboxes.ts",

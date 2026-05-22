@@ -4,6 +4,11 @@ import { notifyWorkerFailure } from "../src/modules/core/worker-alerts";
 import { verifyPendingContacts } from "../src/modules/emailVerification/service";
 
 async function main() {
+  if (env.DEMO_MODE) {
+    console.log("email-verify skipped: DEMO_MODE=true");
+    return;
+  }
+
   if (!env.EMAILLISTVERIFY_ENABLED || !env.EMAILLISTVERIFY_API_KEY) {
     console.log("email-verify skipped: EmailListVerify not configured");
     return;
