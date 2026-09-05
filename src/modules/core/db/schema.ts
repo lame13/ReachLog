@@ -62,6 +62,28 @@ export const emailDrafts = sqliteTable("email_drafts", {
   updatedAt: text("updated_at").notNull()
 });
 
+export const emailTemplates = sqliteTable("email_templates", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  subject: text("subject").notNull(),
+  body: text("body").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull()
+});
+
+export const backgroundSchedules = sqliteTable("background_schedules", {
+  name: text("name").primaryKey(),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(false),
+  intervalMinutes: integer("interval_minutes").notNull(),
+  nextRunAt: text("next_run_at"),
+  lastStartedAt: text("last_started_at"),
+  lastFinishedAt: text("last_finished_at"),
+  lastSuccessAt: text("last_success_at"),
+  lastStatus: text("last_status").notNull().default("never"),
+  lastError: text("last_error"),
+  updatedAt: text("updated_at").notNull()
+});
+
 export const threads = sqliteTable(
   "threads",
   {

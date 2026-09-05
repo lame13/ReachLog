@@ -7,6 +7,8 @@ import { env } from "@/modules/core/env";
 import { getSqlite } from "@/modules/core/db/client";
 import { createId } from "@/modules/core/ids";
 import { clearEmailDraft, saveEmailDraft } from "./drafts";
+import { smtpTransportOptions } from "./transport";
+import { unresolvedVariables } from "../templates/render";
 import { normalizeSubject } from "@/modules/mailbox/threading";
 import {
   isDoNotResendHardBlock,
@@ -62,6 +64,11 @@ export async function sendNowAction(formData: FormData) {
   }
 
   const target = getSendableTarget(targetId);
+
+  if (unresolvedVariables(subject + "\n" + body).length || subject.length > 300 || body.length > 50000 || /[\r\n]/.test(subject)) {
+    if (target) saveEmailDraft(targetId, { subject, body, fromEmail: fromIdentity.value });
+    redirectWithSendFeedback(returnTo, targetId, "error", "Check the subject and message length, and replace all template variables before sending. Your draft was saved.");
+  }
 
   const blockedStatus = isSendBlockedStatus(target?.status);
   const blockedPlatform = target ? isNonActionablePlatformTarget(target) : false;
@@ -178,7 +185,7 @@ export async function sendNowAction(formData: FormData) {
       returnTo,
       targetId,
       "error",
-      "SMTP is disabled. Set SMTP_ENABLED=true in production env and restart the app."
+      "Email sending is off. Connect and enable your SMTP account in Settings."
     );
   }
 
@@ -207,21 +214,7 @@ export async function sendNowAction(formData: FormData) {
     );
   }
 
-  const transporter = nodemailer.createTransport({
-    host: env.SMTP_HOST,
-    port: env.SMTP_PORT,
-    secure: env.SMTP_SECURE,
-    tls: {
-      rejectUnauthorized: env.SMTP_TLS_VERIFY
-    },
-    auth:
-      fromIdentity.smtpUser && fromIdentity.smtpPass
-        ? {
-            user: fromIdentity.smtpUser,
-            pass: fromIdentity.smtpPass
-          }
-        : undefined
-  });
+  const transporter = nodemailer.createTransport(smtpTransportOptions({ user: fromIdentity.smtpUser, pass: fromIdentity.smtpPass }));
 
   let result: SentMessageInfo;
 

@@ -18,6 +18,7 @@ Options:
   --host <address>      Bind address (default: 127.0.0.1)
   --data-dir <path>     Persistent data folder (default: ~/.reachlog)
   --env-file <path>     Configuration file (default: <data-dir>/.env)
+  --no-scheduler       Use external worker scheduling instead
   --help               Show this help
   --version            Print the installed version
 
@@ -25,7 +26,8 @@ Workers: mail-sync, mail-resync, list-mailboxes, followup-check,
          email-verify, backup
 
 Demo uses its own database and never sends email or notifications.
-Workers run once. Schedule them separately if needed.`;
+Workers run once. Enable built-in schedules and configure connections in Settings.
+Scheduled tasks run only while ReachLog is running.`;
 
 function main() {
   const { values, positionals } = parseArgs({
@@ -35,6 +37,7 @@ function main() {
       host: { type: "string" },
       "data-dir": { type: "string" },
       "env-file": { type: "string" },
+      "no-scheduler": { type: "boolean" },
       help: { type: "boolean", short: "h" },
       version: { type: "boolean", short: "v" }
     }
@@ -115,6 +118,8 @@ function main() {
     DOTENV_CONFIG_PATH: envFile,
     DATABASE_PATH: database,
     BACKUP_DIR: backups,
+    REACHLOG_DATA_DIR: dataDir,
+    REACHLOG_CONNECTIONS_PATH: path.join(dataDir, demo ? "demo-connections.json" : "connections.json"),
     APP_URL: appUrl,
     DEMO_MODE: String(demo),
     SEED_DEMO_DATA: String(demo)
@@ -132,13 +137,37 @@ function main() {
     : [require.resolve("next/dist/bin/next"), "start", appDir, "--hostname", host, "--port", String(port)];
   console.log(`ReachLog${demo ? " demo" : ""} · data: ${database}`);
   const child = spawn(process.execPath, args, { env: childEnv, cwd: dataDir, stdio: "inherit" });
+  let stopping = false;
+  let scheduler: ReturnType<typeof spawn> | undefined;
+  let restartTimer: NodeJS.Timeout | undefined;
+  let restartDelay = 1000;
+  function startBackground() {
+    if (stopping) return;
+    scheduler = spawn(process.execPath, [path.join(__dirname, "workers", "scheduler.cjs")], {
+      env: childEnv, cwd: dataDir, stdio: ["ignore", "inherit", "inherit", "ipc"]
+    });
+    scheduler.on("error", () => console.error("Could not start background scheduling. Retrying."));
+    scheduler.on("close", () => {
+      if (stopping) return;
+      restartTimer = setTimeout(startBackground, restartDelay);
+      restartDelay = Math.min(restartDelay * 2, 30_000);
+    });
+  }
+  if (command !== "worker" && !demo && !values["no-scheduler"] && process.env.REACHLOG_SCHEDULER_ENABLED !== "false") startBackground();
+  function stopBackground() {
+    stopping = true;
+    if (restartTimer) clearTimeout(restartTimer);
+    scheduler?.kill("SIGTERM");
+  }
   const signals = ["SIGINT", "SIGTERM"] as const;
-  for (const signal of signals) process.on(signal, () => child.kill(signal));
+  for (const signal of signals) process.on(signal, () => { stopBackground(); child.kill(signal); });
   child.on("error", (error) => {
+    stopBackground();
     console.error(`Could not start ReachLog: ${error.message}`);
     process.exitCode = 1;
   });
   child.on("exit", (code, signal) => {
+    stopBackground();
     process.exitCode = code ?? (signal === "SIGINT" ? 130 : signal === "SIGTERM" ? 143 : 1);
   });
 }

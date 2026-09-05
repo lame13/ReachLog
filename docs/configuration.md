@@ -1,8 +1,12 @@
 # Configuration and hosting
 
-The CLI reads `~/.reachlog/.env` by default, or `<data-dir>/.env` when `--data-dir` is supplied. `--env-file` selects a different file. Environment variables already set in the shell win over file values. Configuration changes take effect after restarting the app and any scheduled tasks.
+SMTP, IMAP, and Telegram can be configured in **Settings → Connections**. Changes saved there take effect immediately in the web app and future worker runs. Save, test the connection, and explicitly enable the features you need. IMAP tests list available mailboxes so you can select the right Inbox and Sent folders.
+
+The CLI also reads `~/.reachlog/.env` by default, or `<data-dir>/.env` when `--data-dir` is supplied. `--env-file` selects a different file. Precedence is shell environment, then `.env`, then saved connection settings, then application defaults. Environment-controlled fields are read-only in Settings. Changes to shell or `.env` values require restarting the app and its workers. To move a connection into the UI, remove its environment values and restart first.
 
 Use `examples/reachlog.env.example` as a starting point. It contains no credentials. Store the completed file outside the npm installation and restrict access to your account.
+
+Saved connections live in `<data-dir>/connections.json` with owner-only file permissions on POSIX systems. Secrets are stored locally as plaintext and are omitted from browser responses, database exports, and SQLite backups. Protect and back up this file separately with the same care as `.env`. Blank password inputs keep their saved values. A changed connection invalidates its previous test result. Demo uses a separate configuration path and disables connection changes and tests.
 
 ## Local storage
 
@@ -20,7 +24,7 @@ Use an IANA timezone such as `Europe/London` or `Asia/Bangkok`. CLI flags overri
 
 Demo always uses `<data-dir>/demo.sqlite`, independently of `DATABASE_PATH`. It cannot send mail, sync a mailbox, call verification services or send notifications. Backups are skipped in demo. The ordinary CLI starts with an empty database and does not seed demo records.
 
-Source development uses `.data/` in the checkout by default. If moving an existing installation, keep its database path explicit. The public release no longer guesses a private hosting path. Create a backup before switching versions.
+Source development uses `.data/` in the checkout by default. If moving an existing installation, keep its database path explicit. The CLI uses the selected data directory without guessing a hosting path. Create a backup before switching versions.
 
 ## SMTP
 
@@ -28,14 +32,14 @@ Source development uses `.data/` in the checkout by default. If moving an existi
 SMTP_ENABLED=true
 SMTP_HOST=smtp.example.com
 SMTP_PORT=587
-SMTP_SECURE=false
+SMTP_SECURITY=starttls
 SMTP_TLS_VERIFY=true
 SMTP_USER=your-user
 SMTP_PASS=your-password
 SMTP_FROM=Your Name <you@example.com>
 ```
 
-Use `SMTP_SECURE=true` for implicit TLS, commonly port 465. For local Proton Bridge, use the host, port, username and password shown by Bridge. Typical local ports are 1025 for SMTP and 1143 for IMAP. Bridge must be running on the same machine or a trusted private network.
+Use `SMTP_SECURITY=tls` for implicit TLS, commonly port 465; `starttls` requires an encrypted upgrade, `auto` negotiates it when offered, and `plain` disables it for a local test relay. Legacy `SMTP_SECURE` remains supported. For local Proton Bridge, use the host, port, username and password shown by Bridge, or choose its preset in Settings. Typical local ports are 1025 for SMTP and 1143 for IMAP. Bridge must be running on the same machine or a trusted private network.
 
 A self-signed local Bridge certificate may require `SMTP_TLS_VERIFY=false` and `IMAP_TLS_VERIFY=false`. Keep verification enabled for ordinary remote mail servers.
 
@@ -76,13 +80,17 @@ Resync looks back 30 days unless `MAIL_SYNC_RESYNC_DAYS` is set. Imports that ad
 
 ## Optional notifications and address checks
 
-Telegram requires `TELEGRAM_ENABLED=true`, `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`. The Settings test button sends a real notification to the configured chat. Reply and due-date notifications can contain contact details and message excerpts.
+Telegram requires a bot token and chat ID, configured in Settings or with `TELEGRAM_ENABLED=true`, `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`. **Test connection** checks bot and chat access without sending a message. **Send test notification** sends a real notification to that chat. Reply and due-date notifications can contain contact details and message excerpts.
 
 EmailListVerify requires `EMAILLISTVERIFY_ENABLED=true` and `EMAILLISTVERIFY_API_KEY`. Addresses are sent to that service for verification. Optional settings: `EMAILLISTVERIFY_TIMEOUT_MS=15000`, `EMAILLISTVERIFY_BATCH_SIZE=25`.
 
 ## Scheduled tasks
 
-Each worker runs once and exits. Use your host's existing scheduler or process manager. For example:
+Built-in scheduling starts with the packaged CLI and `npm run dev`. Enable each schedule under **Settings → Background tasks**. Default intervals are five minutes for mailbox sync, fifteen minutes for follow-up reminders, and one day for backups. Intervals can be changed from one minute to one week. New installations and upgrades leave every schedule paused. Mail sync requires IMAP to be enabled; follow-up reminders require Telegram.
+
+**Run now** queues an enabled task for the next scheduler tick, normally within five seconds. The page refreshes run status while visible. Each task retains its last successful run even if a later attempt fails. Pausing prevents future runs but lets current work finish. The scheduler stops its workers when ReachLog stops, records interrupted runs, and retries due work after restart. Overdue intervals are coalesced into one run. Only one scheduler owns a database at a time, and worker leases prevent overlapping runs with external workers. Scheduled SMTP sending is not supported.
+
+For external scheduling, use `reachlog --no-scheduler` or `REACHLOG_SCHEDULER_ENABLED=false`. Each one-shot worker still runs once and exits. For example:
 
 | Command | Suggested interval |
 | --- | --- |
@@ -91,7 +99,7 @@ Each worker runs once and exits. Use your host's existing scheduler or process m
 | `reachlog worker email-verify` | Every 15 minutes, if enabled |
 | `reachlog worker backup` | Daily |
 
-Pass the same `--data-dir` and `--env-file` to every job. Workers use database locks to avoid overlapping work. Follow-up checks notify you; they do not email contacts automatically.
+Pass the same `--data-dir` and `--env-file` to every job. Workers use renewable database locks to avoid overlapping work; mail-sync, follow-up, and backup workers exit with code 75 when another worker already holds their lock. Follow-up checks notify you; they do not email contacts automatically.
 
 ## Network access
 

@@ -1,8 +1,8 @@
 {
   "name": "reachlog",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "scripts": {
-    "dev": "next dev --hostname 127.0.0.1",
+    "dev": "node scripts/dev.mjs",
     "build": "node scripts/build-package.mjs",
     "start": "node dist/cli.cjs",
     "lint": "eslint .",
@@ -70,6 +70,7 @@
     "examples/",
     "LICENSE",
     "README.md",
+    "CHANGELOG.md",
     "npm-shrinkwrap.json"
   ],
   "engines": {

@@ -1,5 +1,6 @@
 import os from "node:os";
 import process from "node:process";
+import { randomUUID } from "node:crypto";
 import { getSqlite } from "@/modules/core/db/client";
 
 export async function withWorkerLock<T>(
@@ -7,21 +8,24 @@ export async function withWorkerLock<T>(
   leaseSeconds: number,
   work: () => Promise<T>
 ) {
-  const owner = `${os.hostname()}:${process.pid}`;
+  const owner = `${os.hostname()}:${process.pid}:${randomUUID()}`;
 
   if (!acquireWorkerLock(name, owner, leaseSeconds)) {
     console.log(`${name} skipped: lock already held`);
     return null;
   }
 
+  const heartbeat = setInterval(() => renewWorkerLock(name, owner, leaseSeconds), Math.max(1000, leaseSeconds * 1000 / 3));
+  heartbeat.unref();
   try {
     return await work();
   } finally {
+    clearInterval(heartbeat);
     releaseWorkerLock(name, owner);
   }
 }
 
-function acquireWorkerLock(name: string, owner: string, leaseSeconds: number) {
+export function acquireWorkerLock(name: string, owner: string, leaseSeconds: number) {
   const sqlite = getSqlite();
   const now = new Date();
   const nowIso = now.toISOString();
@@ -74,7 +78,13 @@ function acquireWorkerLock(name: string, owner: string, leaseSeconds: number) {
   return transaction();
 }
 
-function releaseWorkerLock(name: string, owner: string) {
+export function renewWorkerLock(name: string, owner: string, leaseSeconds: number) {
+  const now = new Date();
+  return getSqlite().prepare("UPDATE worker_locks SET lease_until = ?, updated_at = ? WHERE name = ? AND owner = ? AND lease_until > ?")
+    .run(new Date(now.getTime() + leaseSeconds * 1000).toISOString(), now.toISOString(), name, owner, now.toISOString()).changes > 0;
+}
+
+export function releaseWorkerLock(name: string, owner: string) {
   getSqlite()
     .prepare("DELETE FROM worker_locks WHERE name = ? AND owner = ?")
     .run(name, owner);

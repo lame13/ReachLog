@@ -10,8 +10,8 @@ const config: Config = {
         line: "#E5E7EB",
         panel: "#F7F8FA",
         accent: "#0F766E",
-        amber: "#B45309",
-        rose: "#BE123C"
+        amber: { DEFAULT: "#B45309" },
+        rose: { DEFAULT: "#BE123C" }
       },
       boxShadow: {
         soft: "0 12px 28px rgba(18, 20, 23, 0.08)"

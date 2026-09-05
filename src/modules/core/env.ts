@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { z } from "zod";
+import { readConnectionValues } from "../connections/store";
 
 process.env.TZ ||= "UTC";
 
@@ -40,6 +41,7 @@ const EnvSchema = z.object({
   SMTP_HOST: z.string().default("127.0.0.1"),
   SMTP_PORT: portFromString(1025),
   SMTP_SECURE: booleanFromString,
+  SMTP_SECURITY: z.enum(["plain", "starttls", "tls", "auto"]).optional(),
   SMTP_TLS_VERIFY: booleanFromString.default("true"),
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
@@ -71,4 +73,15 @@ const EnvSchema = z.object({
   B2_REMOTE: z.string().optional()
 });
 
-export const env = EnvSchema.parse(process.env);
+export function getRuntimeEnv() {
+  const values = { ...readConnectionValues(), ...process.env };
+  // Legacy environment configuration remains authoritative over saved settings.
+  if (process.env.SMTP_SECURE !== undefined && process.env.SMTP_SECURITY === undefined) delete values.SMTP_SECURITY;
+  if (process.env.IMAP_SECURE !== undefined && process.env.IMAP_SECURITY === undefined) delete values.IMAP_SECURITY;
+  return EnvSchema.parse(values);
+}
+
+// Connections are read on use, so a settings save reaches both the web app and future workers.
+export const env = new Proxy(EnvSchema.parse(process.env), {
+  get: (_target, property: string) => Reflect.get(getRuntimeEnv(), property)
+});

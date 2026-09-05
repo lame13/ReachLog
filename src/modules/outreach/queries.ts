@@ -959,6 +959,7 @@ export function getSendTarget(targetId: string | undefined) {
         targets.do_not_resend as doNotResend,
         targets.source_type as sourceType,
         targets.source_url as sourceUrl,
+        targets.website_url as websiteUrl,
         targets.status,
         contacts.email as contactEmail,
         contacts.email_verification_status as emailVerificationStatus,
@@ -1005,6 +1006,7 @@ export function getSendTarget(targetId: string | undefined) {
         doNotResend: number;
         sourceType: string;
         sourceUrl: string | null;
+        websiteUrl: string | null;
         status: string;
         contactEmail: string | null;
         emailVerificationStatus: string | null;

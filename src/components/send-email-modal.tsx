@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { Save, X } from "lucide-react";
-import { SendSubmitButton } from "@/components/send-submit-button";
-import { saveDraftAction, sendNowAction } from "@/modules/smtp/actions";
+import { X } from "lucide-react";
+import { EmailComposerFields } from "./email-composer-fields";
+import { getTemplates } from "@/modules/templates/store";
+import { sendNowAction } from "@/modules/smtp/actions";
 import { formatDateTime } from "@/modules/core/dates";
 import { createId } from "@/modules/core/ids";
 import {
@@ -23,6 +24,7 @@ type SendTarget = {
   doNotResend: boolean;
   sourceType: string;
   sourceUrl: string | null;
+  websiteUrl: string | null;
   contactEmail: string | null;
   emailVerificationStatus: string | null;
   emailVerificationCheckedAt: string | null;
@@ -153,25 +155,12 @@ export function SendEmailModal({
               value={target.contactEmail ?? "No email on target"}
             />
           </label>
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium">Subject</span>
-            <input
-              className="h-10 w-full rounded-md border border-line px-3 text-sm outline-none focus:border-accent"
-              name="subject"
-              defaultValue={subject}
-              required
-            />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium">Body</span>
-            <textarea
-              className="min-h-48 w-full resize-y rounded-md border border-line px-3 py-2 text-sm outline-none focus:border-accent"
-              name="body"
-              defaultValue={target.draft?.body ?? target.lastOutboundBody ?? ""}
-              required
-            />
-          </label>
-
+          <EmailComposerFields
+            initial={{ subject, body: target.draft?.body ?? target.lastOutboundBody ?? "" }}
+            templates={getTemplates()}
+            context={{ contact_name: target.contactName, company: target.companyName, email: target.contactEmail, website: target.websiteUrl }}
+            canSend={canSend}
+          >
           <div className="rounded-md border border-line bg-panel p-3 text-sm text-muted">
             <div>Last outbound: {formatDateTime(target.lastOutboundAt)}</div>
             <div>Status: {target.status}</div>
@@ -212,17 +201,7 @@ export function SendEmailModal({
             </label>
           </div>
 
-          <div className="flex flex-wrap justify-end gap-2">
-            <button
-              formAction={saveDraftAction}
-              className="inline-flex h-10 items-center gap-2 rounded-md border border-line bg-white px-3 text-sm font-medium hover:bg-panel"
-              type="submit"
-            >
-              <Save className="size-4" aria-hidden="true" />
-              Save draft
-            </button>
-            <SendSubmitButton disabled={!canSend} />
-          </div>
+          </EmailComposerFields>
         </form>
       </div>
       </div>

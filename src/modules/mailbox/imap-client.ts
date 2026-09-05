@@ -11,6 +11,10 @@ export function getImapFlowOptions(): ImapFlowOptions {
   const securityMode = getImapSecurityMode();
 
   return {
+    logger: false,
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 60_000,
     host: env.IMAP_HOST,
     port: env.IMAP_PORT,
     secure: securityMode === "tls",

@@ -11,7 +11,7 @@ async function main() {
     return;
   }
 
-  await withWorkerLock("backup", 1800, runBackup);
+  if (await withWorkerLock("backup", 1800, runBackup) === null) process.exitCode = 75;
 }
 
 async function runBackup() {

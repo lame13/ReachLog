@@ -36,6 +36,9 @@ Demo uses a separate database. It records simulated sends locally and never conn
 - Track contacts, companies, outreach history and do-not-contact records.
 - Import CSV files with a duplicate check before changes are made.
 - Save email drafts and schedule manual follow-ups.
+- Reuse email templates with contact variables, previews, and editable messages.
+- Configure and test SMTP, IMAP, and Telegram in Settings. Discover available mailboxes and use local Proton Bridge presets.
+- Schedule mailbox sync, follow-up reminders, and database backups while the app is running.
 - Connect SMTP for individual sends and IMAP for replies and sent messages. Proton Bridge is supported.
 - Export contacts, messages, follow-ups and history as CSV or JSON.
 - Optionally verify addresses with EmailListVerify and receive Telegram notifications.
@@ -61,7 +64,9 @@ Use the same data directory and configuration for the app and its workers.
 
 ## Email and notifications
 
-Start with [examples/reachlog.env.example](examples/reachlog.env.example). Copy it outside the package directory, into your data directory as `.env`, and add only the connections you need.
+Open **Settings → Connections**. Enter account details, save, and test the connection. Enable sending, mailbox sync, or Telegram when ready. SMTP and IMAP tests do not send email; Telegram connection tests check the bot and chat without sending a notification. A separate **Send test notification** button sends a message to your configured chat.
+
+Settings take effect immediately. Password fields stay blank after saving; leaving one blank preserves its saved value. Explicit environment and `.env` values take precedence and appear as read-only fields. Keep those values unset to manage a connection through the UI. [examples/reachlog.env.example](examples/reachlog.env.example) documents the optional environment settings.
 
 [Configuration and hosting](docs/configuration.md) covers SMTP, Proton Bridge, IMAP, authentication, scheduled jobs and backups.
 
@@ -73,7 +78,15 @@ reachlog worker followup-check
 reachlog worker backup
 ```
 
-Workers do not start automatically. Schedule the ones you need. Follow-up notifications do not send follow-up emails.
+Open **Settings → Background tasks** to enable schedules, choose intervals, run a task now, and check the last run, last success, next run, or failure. Schedules start paused, including after an upgrade. They run only while ReachLog is running. An overdue task runs once after restart; missed intervals are not replayed. Follow-up notifications do not send follow-up emails.
+
+For an existing cron or systemd setup, start with `reachlog --no-scheduler` or `REACHLOG_SCHEDULER_ENABLED=false`. One-shot worker commands remain available and share worker locks with built-in scheduling.
+
+## Email templates
+
+Open **Templates** to create, edit, or delete a reusable subject and body. Supported variables are `{{contact_name}}`, `{{company}}`, `{{email}}`, and `{{website}}`.
+
+In the email composer, choose a template to preview it for the current contact. **Use template** replaces the subject and body; **Undo template** restores the previous text. Edit the result before sending. Missing values remain visible and block sending until replaced; unfinished messages can still be saved as drafts. Deleting a template does not change saved drafts or sent messages.
 
 ## Network access
 

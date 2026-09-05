@@ -3,20 +3,29 @@ import { spawnSync } from "node:child_process";
 import { cp, mkdir, readdir, readFile, rm, writeFile, chmod } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 
 const require = createRequire(import.meta.url);
 const root = path.resolve(import.meta.dirname, "..");
 process.chdir(root);
-// Never load the maintainer's mail settings or database while building a public package.
+// Never load runtime mail settings or the database while building a package.
 for (const file of [".env", ".env.local", ".env.production", ".env.production.local"]) {
   try {
     await readFile(file);
-    throw new Error(`Move ${file} outside the source checkout before building a public release.`);
+    throw new Error(`Move ${file} outside the source checkout before building a release.`);
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
   }
 }
-const env = { ...process.env, NEXT_TELEMETRY_DISABLED: "1", DEMO_MODE: "false", SEED_DEMO_DATA: "false" };
+const scratch = mkdtempSync(path.join(tmpdir(), "reachlog-build-"));
+process.once("exit", () => rmSync(scratch, { recursive: true, force: true }));
+const env = {
+  ...process.env, NEXT_TELEMETRY_DISABLED: "1", DEMO_MODE: "false", SEED_DEMO_DATA: "false",
+  REACHLOG_DATA_DIR: scratch, REACHLOG_CONNECTIONS_PATH: path.join(scratch, "connections.json"),
+  DATABASE_PATH: path.join(scratch, "app.sqlite"), BACKUP_DIR: path.join(scratch, "backups"),
+  DOTENV_CONFIG_PATH: path.join(scratch, ".env"), REACHLOG_SCHEDULER_ENABLED: "false"
+};
 for (const key of Object.keys(env)) {
   if (/^(SMTP_|IMAP_|TELEGRAM_|EMAILLISTVERIFY_|APP_BASIC_AUTH_|NEXT_PUBLIC_)/.test(key)) delete env[key];
 }

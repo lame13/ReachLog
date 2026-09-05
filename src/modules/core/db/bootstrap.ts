@@ -206,6 +206,33 @@ export function bootstrapDatabase(sqlite: SqliteDatabase) {
   recordSchemaVersion(sqlite, "0004", "contact_email_verification");
   recordSchemaVersion(sqlite, "0005", "message_read_state");
   recordSchemaVersion(sqlite, "0006", "email_drafts");
+  sqlite.transaction(() => {
+    sqlite.exec(`
+      CREATE TABLE IF NOT EXISTS email_templates (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL COLLATE NOCASE UNIQUE CHECK(length(trim(name)) BETWEEN 1 AND 100),
+        subject TEXT NOT NULL CHECK(length(subject) BETWEEN 1 AND 300),
+        body TEXT NOT NULL CHECK(length(body) BETWEEN 1 AND 50000),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS background_schedules (
+        name TEXT PRIMARY KEY CHECK(name IN ('mail-sync', 'followup-check', 'backup')),
+        enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0, 1)),
+        interval_minutes INTEGER NOT NULL CHECK(interval_minutes BETWEEN 1 AND 10080),
+        next_run_at TEXT,
+        last_started_at TEXT,
+        last_finished_at TEXT,
+        last_success_at TEXT,
+        last_status TEXT NOT NULL DEFAULT 'never' CHECK(last_status IN ('never', 'running', 'success', 'failed', 'skipped', 'interrupted')),
+        last_error TEXT,
+        updated_at TEXT NOT NULL
+      );
+    `);
+    const insert = sqlite.prepare("INSERT INTO background_schedules (name, interval_minutes, updated_at) VALUES (?, ?, ?) ON CONFLICT(name) DO NOTHING");
+    for (const [name, minutes] of [["mail-sync", 5], ["followup-check", 15], ["backup", 1440]] as const) insert.run(name, minutes, new Date().toISOString());
+    recordSchemaVersion(sqlite, "0007", "connections_scheduling_templates");
+  })();
 
   const seeded = sqlite
     .prepare("SELECT COUNT(*) as count FROM contacts")

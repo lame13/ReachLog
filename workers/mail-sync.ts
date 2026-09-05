@@ -61,7 +61,7 @@ async function main() {
     return;
   }
 
-  await withWorkerLock("mail-sync", 1800, runMailSync);
+  if (await withWorkerLock("mail-sync", 1800, runMailSync) === null) process.exitCode = 75;
 }
 
 async function runMailSync() {

@@ -6,6 +6,7 @@ import { useState } from "react";
 import {
   BarChart3,
   Database,
+  FileText,
   Home,
   Inbox,
   Menu,
@@ -21,6 +22,7 @@ const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: Home },
   { href: "/targets", label: "Targets", icon: Target },
   { href: "/followups", label: "Follow-ups", icon: Inbox },
+  { href: "/templates", label: "Templates", icon: FileText },
   { href: "/import", label: "Import", icon: Upload },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/settings/modules", label: "Settings", icon: Settings }

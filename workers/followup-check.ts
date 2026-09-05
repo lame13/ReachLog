@@ -20,7 +20,7 @@ async function main() {
     return;
   }
 
-  await withWorkerLock("followup-check", 120, checkFollowups);
+  if (await withWorkerLock("followup-check", 120, checkFollowups) === null) process.exitCode = 75;
 }
 
 async function checkFollowups() {
@@ -53,9 +53,11 @@ async function checkFollowups() {
     return;
   }
 
+  let failed = 0;
   for (const followup of dueFollowups) {
     const text = `Follow-up due: ${followup.company_name} (${followup.contact_email ?? "form only"})\n${targetUrl(followup.target_id)}`;
     const result = await sendTelegramMessage(text);
+    if (!result.sent) failed++;
 
     if (result.sent) {
       sqlite
@@ -84,6 +86,7 @@ async function checkFollowups() {
   }
 
   console.log(`followup-check: ${dueFollowups.length} due`);
+  if (failed) throw new Error(`${failed} follow-up notifications failed. Check the Telegram connection.`);
 }
 
 main().catch(async (error) => {

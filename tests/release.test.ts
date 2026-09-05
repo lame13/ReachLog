@@ -11,6 +11,7 @@ import { spawnSync } from 'node:child_process';
 test('release regressions', async (t) => {
 const directory = mkdtempSync(path.join(tmpdir(), 'reachlog-test-'));
 process.env.DATABASE_PATH = path.join(directory, 'app.sqlite');
+process.env.REACHLOG_CONNECTIONS_PATH = path.join(directory, 'connections.json');
 process.env.DEMO_MODE = 'false';
 process.env.SEED_DEMO_DATA = 'false';
 process.env.SMTP_ENABLED = 'false';
