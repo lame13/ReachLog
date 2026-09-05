@@ -3,7 +3,8 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "ReachLog",
-  description: "Private outreach command center"
+  description: "Keep track of outreach, replies and follow-ups.",
+  robots: { index: false, follow: false }
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

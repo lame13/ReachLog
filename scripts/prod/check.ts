@@ -14,8 +14,6 @@ const checks: Check[] = [
   checkWritablePath("DATABASE_PATH parent", dirname(resolve(env.DATABASE_PATH))),
   checkWritableFileOrParent("DATABASE_PATH", resolve(env.DATABASE_PATH)),
   checkWritablePath("BACKUP_DIR", resolve(env.BACKUP_DIR)),
-  env.DEMO_MODE ? pass("sqlite3", "skipped in demo mode") : checkCommand("sqlite3"),
-  env.DEMO_MODE ? pass("gzip", "skipped in demo mode") : checkCommand("gzip"),
   env.DEMO_MODE
     ? pass("rclone", "skipped in demo mode")
     : env.B2_REMOTE

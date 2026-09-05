@@ -31,3 +31,7 @@ pnpm-debug.log*
 # OS / IDE
 .DS_Store
 .idea/
+
+# Local build state
+*.tsbuildinfo
+*.tgz

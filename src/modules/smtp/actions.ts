@@ -1,11 +1,12 @@
 "use server";
 
-import nodemailer from "nodemailer";
+import nodemailer, { type SentMessageInfo } from "nodemailer";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { env } from "@/modules/core/env";
 import { getSqlite } from "@/modules/core/db/client";
 import { createId } from "@/modules/core/ids";
+import { clearEmailDraft, saveEmailDraft } from "./drafts";
 import { normalizeSubject } from "@/modules/mailbox/threading";
 import {
   isDoNotResendHardBlock,
@@ -28,8 +29,15 @@ export async function saveDraftAction(formData: FormData) {
     return;
   }
 
+  if (!getSendableTarget(targetId)) return;
+  const fromEmail = selectSmtpIdentity(String(formData.get("fromEmail") ?? "")).value;
+  saveEmailDraft(targetId, { subject, body, fromEmail });
   createTargetEvent(targetId, "draft_saved", { subject, bodyLength: body.length });
   revalidatePath(`/targets/${targetId}`);
+  redirectWithSendFeedback(
+    getSafeReturnTo(String(formData.get("returnTo") ?? "")),
+    targetId, "success", "Draft saved. Nothing was sent."
+  );
 }
 
 export async function sendNowAction(formData: FormData) {
@@ -141,7 +149,7 @@ export async function sendNowAction(formData: FormData) {
         accepted: [contactEmail],
         rejected: [],
         response: "demo_mode"
-      } as nodemailer.SentMessageInfo,
+      },
       createFollowup,
       followupDays
     });
@@ -215,7 +223,7 @@ export async function sendNowAction(formData: FormData) {
         : undefined
   });
 
-  let result: nodemailer.SentMessageInfo;
+  let result: SentMessageInfo;
 
   try {
     result = await transporter.sendMail({
@@ -358,7 +366,7 @@ function persistSentEmail({
   messageId: string;
   replyToMessageId: string | undefined;
   outboundSendId: string;
-  rawResult: nodemailer.SentMessageInfo;
+  rawResult: Pick<SentMessageInfo, "accepted" | "rejected" | "response">;
   createFollowup: boolean;
   followupDays: number;
 }) {
@@ -450,6 +458,8 @@ function persistSentEmail({
     sqlite
       .prepare("UPDATE targets SET status = 'sent', updated_at = ? WHERE id = ?")
       .run(now, target.id);
+
+    clearEmailDraft(target.id);
 
     sqlite
       .prepare(

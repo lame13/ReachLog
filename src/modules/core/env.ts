@@ -1,32 +1,19 @@
 import "dotenv/config";
 import { z } from "zod";
 
-process.env.TZ ||= "Asia/Bangkok";
+process.env.TZ ||= "UTC";
 
-const forgeAppRoot = "/home/reach-log/reachlog-pzjckw1w.on-forge.com";
 const demoModeFromEnv = process.env.DEMO_MODE === "true";
-const isForgeAppPath = process.cwd().startsWith(forgeAppRoot);
-const usesForgeDefaults = process.env.NODE_ENV === "production" || isForgeAppPath;
 const defaultDatabasePath = demoModeFromEnv
-  ? usesForgeDefaults
-    ? `${forgeAppRoot}/shared/demo/app.sqlite`
-    : ".data/demo.sqlite"
-  : usesForgeDefaults
-  ? `${forgeAppRoot}/shared/data/app.sqlite`
+  ? ".data/demo.sqlite"
   : ".data/app.sqlite";
 const defaultBackupDir = demoModeFromEnv
-  ? usesForgeDefaults
-    ? `${forgeAppRoot}/shared/demo/backups`
-    : ".data/demo-backups"
-  : usesForgeDefaults
-  ? `${forgeAppRoot}/shared/data/backups`
+  ? ".data/demo-backups"
   : ".data/backups";
-const defaultAppUrl = usesForgeDefaults
-  ? "https://reachlog-pzjckw1w.on-forge.com"
-  : "http://localhost:3000";
+const defaultAppUrl = "http://localhost:3000";
 
 const booleanFromString = z
-  .string()
+  .enum(["true", "false"])
   .optional()
   .default("false")
   .transform((value) => value === "true");
@@ -35,11 +22,12 @@ const portFromString = (fallback: number) =>
   z
     .string()
     .optional()
-    .transform((value) => (value ? Number(value) : fallback));
+    .transform((value) => (value ? Number(value) : fallback))
+    .pipe(z.number().int().positive());
 
 const EnvSchema = z.object({
-  TZ: z.string().default("Asia/Bangkok"),
-  APP_URL: z.string().default(defaultAppUrl),
+  TZ: z.string().default("UTC"),
+  APP_URL: z.string().url().default(defaultAppUrl),
   DEMO_MODE: booleanFromString,
   DATABASE_PATH: z.string().default(defaultDatabasePath),
   SEED_DEMO_DATA: booleanFromString,

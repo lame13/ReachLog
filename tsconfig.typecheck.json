@@ -7,7 +7,11 @@
     "workers/**/*.ts",
     "scripts/**/*.ts",
     "drizzle.config.ts",
-    "tailwind.config.ts"
+    "tailwind.config.ts",
+    "tests/**/*.ts"
   ],
-  "exclude": ["node_modules", ".next"]
+  "exclude": [
+    "node_modules",
+    ".next"
+  ]
 }

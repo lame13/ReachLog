@@ -39,7 +39,7 @@ export function ImportCsvPanel() {
         <div className="grid size-10 place-items-center rounded-md bg-panel">
           <Upload className="size-5 text-muted" aria-hidden="true" />
         </div>
-        <h2 className="mt-4 font-semibold">CSV Intake</h2>
+        <h2 className="mt-4 font-semibold">Upload your contacts</h2>
 
         <form action={previewAction} className="mt-4 space-y-4">
           <label className="block">
@@ -69,12 +69,12 @@ export function ImportCsvPanel() {
             type="submit"
           >
             <DatabaseZap className="size-4" aria-hidden="true" />
-            {previewPending ? "Checking..." : "Preview Dedupe"}
+            {previewPending ? "Checking..." : "Check for duplicates"}
           </button>
         </form>
 
         <div className="mt-5 rounded-md border border-line bg-panel p-3 text-sm text-muted">
-          <div>Canonical headers: target, contact_type, contact_value, domain_key, dedupe_key.</div>
+          <div>Supported headers: target, contact_type, contact_value, domain_key, dedupe_key.</div>
           <div className="mt-1">
             Optional: follow_up_date, next_action, do_not_resend, source_reference.
           </div>
@@ -84,7 +84,7 @@ export function ImportCsvPanel() {
       <section className="rounded-lg border border-line bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
           <div>
-            <h2 className="font-semibold">Dedupe Preview</h2>
+            <h2 className="font-semibold">Import preview</h2>
             <p className="mt-1 text-xs text-muted">
               {activeState.summary.total} rows, {activeState.summary.importable} importable,{" "}
               {activeState.summary.warnings} warnings

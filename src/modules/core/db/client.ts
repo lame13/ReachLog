@@ -7,9 +7,7 @@ import { bootstrapDatabase } from "./bootstrap";
 import * as schema from "./schema";
 
 declare global {
-  // eslint-disable-next-line no-var
   var __reachlogSqlite: Database.Database | undefined;
-  // eslint-disable-next-line no-var
   var __reachlogDb:
     | ReturnType<typeof drizzle<typeof schema>>
     | undefined;

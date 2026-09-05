@@ -43,6 +43,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS targets_dedupe_key_unique ON targets(dedupe_ke
 CREATE INDEX IF NOT EXISTS targets_contact_idx ON targets(contact_id);
 CREATE INDEX IF NOT EXISTS targets_status_idx ON targets(status);
 
+CREATE TABLE IF NOT EXISTS email_drafts (
+  target_id TEXT PRIMARY KEY REFERENCES targets(id) ON DELETE CASCADE,
+  subject TEXT NOT NULL,
+  body TEXT NOT NULL,
+  from_email TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS threads (
   id TEXT PRIMARY KEY,
   target_id TEXT NOT NULL REFERENCES targets(id),
@@ -197,6 +205,7 @@ export function bootstrapDatabase(sqlite: SqliteDatabase) {
   recordSchemaVersion(sqlite, "0003", "outbound_send_idempotency");
   recordSchemaVersion(sqlite, "0004", "contact_email_verification");
   recordSchemaVersion(sqlite, "0005", "message_read_state");
+  recordSchemaVersion(sqlite, "0006", "email_drafts");
 
   const seeded = sqlite
     .prepare("SELECT COUNT(*) as count FROM contacts")
@@ -351,21 +360,21 @@ function seedDatabase(sqlite: SqliteDatabase) {
     [
       {
         id: "contact-acme",
-        name: "Niko",
-        email: "niko@acmehost.dev",
-        domain: "acmehost.dev"
+        name: "Alex",
+        email: "alex@acme.example",
+        domain: "acme.example"
       },
       {
         id: "contact-blue",
         name: "Blue Apps",
-        email: "hello@blueapps.io",
-        domain: "blueapps.io"
+        email: "hello@blue.example",
+        domain: "blue.example"
       },
       {
         id: "contact-wptools",
         name: "WP Tools Ops",
-        email: "ops@wptools.io",
-        domain: "wptools.io"
+        email: "ops@wptools.example",
+        domain: "wptools.example"
       }
     ].forEach((contact) =>
       insertContact.run({
@@ -380,10 +389,10 @@ function seedDatabase(sqlite: SqliteDatabase) {
         id: "target-acme",
         contactId: "contact-acme",
         companyName: "Acme Hosting",
-        websiteUrl: "https://acmehost.dev",
+        websiteUrl: "https://acme.example",
         sourceType: "hn",
         sourceUrl: "https://news.ycombinator.com/item?id=401",
-        dedupeKey: "email:niko@acmehost.dev",
+        dedupeKey: "email:alex@acme.example",
         status: "replied",
         doNotResend: 0
       },
@@ -391,10 +400,10 @@ function seedDatabase(sqlite: SqliteDatabase) {
         id: "target-blue",
         contactId: "contact-blue",
         companyName: "Blue Apps",
-        websiteUrl: "https://blueapps.io",
+        websiteUrl: "https://blue.example",
         sourceType: "contact_form",
-        sourceUrl: "https://blueapps.io/contact",
-        dedupeKey: "domain:blueapps.io",
+        sourceUrl: "https://blue.example/contact",
+        dedupeKey: "domain:blue.example",
         status: "sent",
         doNotResend: 0
       },
@@ -402,7 +411,7 @@ function seedDatabase(sqlite: SqliteDatabase) {
         id: "target-wptools",
         contactId: "contact-wptools",
         companyName: "WP Tools Ltd",
-        websiteUrl: "https://wptools.io",
+        websiteUrl: "https://wptools.example",
         sourceType: "wporg",
         sourceUrl: "https://wordpress.org/support/topic/example",
         dedupeKey: "wporg:https://wordpress.org/support/topic/example",
@@ -437,7 +446,7 @@ function seedDatabase(sqlite: SqliteDatabase) {
         subject: "Quick question about Acme Hosting",
         normalizedSubject: "quick question about acme hosting",
         firstMessageId: "<reachlog-acme-1@example.local>",
-        lastMessageId: "<acme-reply-1@acmehost.dev>",
+        lastMessageId: "<acme-reply-1@acme.example>",
         lastInboundAt: iso(0, 7),
         lastOutboundAt: iso(-2, 13),
         nextFollowupAt: null,
@@ -485,9 +494,9 @@ function seedDatabase(sqlite: SqliteDatabase) {
         threadId: "thread-acme",
         direction: "outbound",
         fromEmail: "me@example.com",
-        toEmail: "niko@acmehost.dev",
+        toEmail: "alex@acme.example",
         subject: "Quick question about Acme Hosting",
-        bodyText: "Hey Niko, quick question about Acme Hosting.",
+        bodyText: "Hey Alex, quick question about Acme Hosting.",
         messageId: "<reachlog-acme-1@example.local>",
         inReplyTo: null,
         referencesHeader: null,
@@ -498,11 +507,11 @@ function seedDatabase(sqlite: SqliteDatabase) {
         id: "message-acme-in",
         threadId: "thread-acme",
         direction: "inbound",
-        fromEmail: "niko@acmehost.dev",
+        fromEmail: "alex@acme.example",
         toEmail: "me@example.com",
         subject: "Re: Quick question about Acme Hosting",
         bodyText: "Sure, send details.",
-        messageId: "<acme-reply-1@acmehost.dev>",
+        messageId: "<acme-reply-1@acme.example>",
         inReplyTo: "<reachlog-acme-1@example.local>",
         referencesHeader: "<reachlog-acme-1@example.local>",
         sentAt: null,
@@ -513,7 +522,7 @@ function seedDatabase(sqlite: SqliteDatabase) {
         threadId: "thread-blue",
         direction: "outbound",
         fromEmail: "me@example.com",
-        toEmail: "hello@blueapps.io",
+        toEmail: "hello@blue.example",
         subject: "Quick question about Blue Apps",
         bodyText: "Hi, I noticed Blue Apps and wanted to ask a quick question.",
         messageId: "<reachlog-blue-1@example.local>",
@@ -527,7 +536,7 @@ function seedDatabase(sqlite: SqliteDatabase) {
         threadId: "thread-wptools",
         direction: "outbound",
         fromEmail: "me@example.com",
-        toEmail: "ops@wptools.io",
+        toEmail: "ops@wptools.example",
         subject: "Following up on WP Tools",
         bodyText: "Hi, following up on the WP Tools thread.",
         messageId: "<reachlog-wptools-1@example.local>",
@@ -597,12 +606,12 @@ function seedDatabase(sqlite: SqliteDatabase) {
     insertForm.run({
       id: "form-blue",
       targetId: "target-blue",
-      websiteUrl: "https://blueapps.io",
-      formUrl: "https://blueapps.io/contact",
+      websiteUrl: "https://blue.example",
+      formUrl: "https://blue.example/contact",
       subject: "Quick question about Blue Apps",
       messageText: "Hi, I noticed Blue Apps and wanted to ask a quick question.",
       submittedAt: iso(-5, 9),
-      dedupeKey: "form:blueapps.io/contact",
+      dedupeKey: "form:blue.example/contact",
       notes: "Submitted before direct email.",
       createdAt: iso(-5, 9)
     });

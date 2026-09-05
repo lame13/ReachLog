@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 const REALM = "ReachLog";
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   if (process.env.APP_BASIC_AUTH_ENABLED !== "true") {
     return NextResponse.next();
   }

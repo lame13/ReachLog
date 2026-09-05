@@ -54,6 +54,14 @@ export const targets = sqliteTable(
   })
 );
 
+export const emailDrafts = sqliteTable("email_drafts", {
+  targetId: text("target_id").primaryKey().references(() => targets.id, { onDelete: "cascade" }),
+  subject: text("subject").notNull(),
+  body: text("body").notNull(),
+  fromEmail: text("from_email").notNull(),
+  updatedAt: text("updated_at").notNull()
+});
+
 export const threads = sqliteTable(
   "threads",
   {

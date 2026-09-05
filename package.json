@@ -1,43 +1,44 @@
 {
   "name": "reachlog",
   "version": "0.1.0",
-  "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "HOSTNAME=127.0.0.1 node .next/standalone/server.js",
-    "lint": "next lint",
+    "dev": "next dev --hostname 127.0.0.1",
+    "build": "node scripts/build-package.mjs",
+    "start": "node dist/cli.cjs",
+    "lint": "eslint .",
     "typecheck": "tsc --noEmit --project tsconfig.typecheck.json",
     "db:studio": "drizzle-kit studio",
     "db:generate": "drizzle-kit generate",
-    "prod:check": "tsx scripts/prod/check.ts",
-    "prod:mail-sync-audit": "tsx scripts/prod/mail-sync-audit.ts",
-    "prod:backfill-source-timestamps": "tsx scripts/prod/backfill-source-timestamps.ts",
-    "prod:backfill-mail-event-timestamps": "tsx scripts/prod/backfill-mail-event-timestamps.ts",
-    "demo:reset": "DEMO_MODE=true SEED_DEMO_DATA=true tsx scripts/demo/reset.ts",
-    "demo:dev": "DEMO_MODE=true SEED_DEMO_DATA=true DATABASE_PATH=.data/demo.sqlite npm run dev",
-    "worker:mail-sync": "tsx workers/mail-sync.ts",
+    "prod:check": "node --import tsx scripts/prod/check.ts",
+    "prod:mail-sync-audit": "node --import tsx scripts/prod/mail-sync-audit.ts",
+    "prod:backfill-source-timestamps": "node --import tsx scripts/prod/backfill-source-timestamps.ts",
+    "prod:backfill-mail-event-timestamps": "node --import tsx scripts/prod/backfill-mail-event-timestamps.ts",
+    "demo:reset": "node --import tsx scripts/demo/reset.ts",
+    "demo:dev": "node --import tsx scripts/demo/dev.ts",
+    "worker:mail-sync": "node --import tsx workers/mail-sync.ts",
     "worker:mail-resync": "MAIL_SYNC_RESYNC_DAYS=${MAIL_SYNC_RESYNC_DAYS:-30} tsx workers/mail-sync.ts",
-    "worker:list-mailboxes": "tsx workers/list-mailboxes.ts",
-    "worker:email-verify": "tsx workers/email-verify.ts",
-    "worker:followup-check": "tsx workers/followup-check.ts",
-    "worker:backup": "tsx workers/backup.ts"
+    "worker:list-mailboxes": "node --import tsx workers/list-mailboxes.ts",
+    "worker:email-verify": "node --import tsx workers/email-verify.ts",
+    "worker:followup-check": "node --import tsx workers/followup-check.ts",
+    "worker:backup": "node --import tsx workers/backup.ts",
+    "demo": "node dist/cli.cjs demo",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "prepack": "npm run typecheck && npm run lint && npm test && npm run build && node scripts/check-package.mjs"
   },
   "dependencies": {
-    "better-sqlite3": "^11.8.1",
-    "clsx": "^2.1.1",
-    "dotenv": "^16.4.7",
-    "drizzle-orm": "^0.38.4",
-    "imapflow": "^1.0.183",
-    "lucide-react": "^0.468.0",
-    "mailparser": "^3.7.2",
-    "next": "^15.1.4",
-    "nodemailer": "^6.9.16",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "tailwind-merge": "^2.6.0",
-    "tsx": "^4.19.2",
-    "zod": "^3.24.1"
+    "better-sqlite3": "13.0.3",
+    "clsx": "2.1.1",
+    "dotenv": "16.6.1",
+    "drizzle-orm": "0.45.2",
+    "imapflow": "1.7.8",
+    "lucide-react": "0.468.0",
+    "mailparser": "3.9.20",
+    "next": "16.3.4",
+    "nodemailer": "10.0.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "tailwind-merge": "2.6.1",
+    "zod": "3.25.76"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",
@@ -48,10 +49,41 @@
     "@types/react-dom": "^19.0.2",
     "autoprefixer": "^10.4.20",
     "drizzle-kit": "^0.30.2",
+    "esbuild": "0.28.2",
     "eslint": "^9.17.0",
-    "eslint-config-next": "^15.1.4",
-    "postcss": "^8.4.49",
+    "eslint-config-next": "16.3.4",
+    "postcss": "8.5.28",
     "tailwindcss": "^3.4.17",
+    "tsx": "^4.19.2",
     "typescript": "^5.7.2"
+  },
+  "description": "A local outreach tracker for contacts, replies and follow-ups, with optional SMTP and IMAP.",
+  "license": "MIT",
+  "author": "Niko",
+  "homepage": "https://nikom.work/",
+  "bin": {
+    "reachlog": "dist/cli.cjs"
+  },
+  "files": [
+    "dist/",
+    "docs/",
+    "examples/",
+    "LICENSE",
+    "README.md",
+    "npm-shrinkwrap.json"
+  ],
+  "engines": {
+    "node": "^22.0.0 || ^24.0.0"
+  },
+  "keywords": [
+    "outreach",
+    "crm",
+    "follow-ups",
+    "sqlite",
+    "self-hosted",
+    "typescript"
+  ],
+  "publishConfig": {
+    "access": "public"
   }
 }

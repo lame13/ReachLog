@@ -14,6 +14,7 @@ import {
   selectPreferredSmtpFrom
 } from "@/modules/smtp/from-identities";
 import type { SendFeedback } from "@/modules/smtp/feedback";
+import type { EmailDraft } from "@/modules/smtp/drafts";
 
 type SendTarget = {
   id: string;
@@ -32,6 +33,7 @@ type SendTarget = {
   lastOutboundFrom: string | null;
   lastOutboundBody: string | null;
   subject: string | null;
+  draft: EmailDraft | null;
 };
 
 export function SendEmailModal({
@@ -47,11 +49,11 @@ export function SendEmailModal({
     return null;
   }
 
-  const subject = target.subject
+  const subject = target.draft?.subject ?? (target.subject
     ? target.subject.startsWith("Re:")
       ? target.subject
       : `Re: ${target.subject}`
-    : `Quick question about ${target.companyName}`;
+    : `Quick question about ${target.companyName}`);
   const blockedEmailVerification = isEmailVerificationBlocking(
     target.emailVerificationStatus
   );
@@ -69,7 +71,9 @@ export function SendEmailModal({
     emailVerificationStatus: target.emailVerificationStatus
   });
   const fromOptions = getSmtpFromOptions();
-  const selectedFrom = selectPreferredSmtpFrom(target);
+  const selectedFrom = fromOptions.some((option) => option.value === target.draft?.fromEmail)
+    ? target.draft!.fromEmail
+    : selectPreferredSmtpFrom(target);
   const sendKey = createId("sendkey");
 
   return (
@@ -163,7 +167,7 @@ export function SendEmailModal({
             <textarea
               className="min-h-48 w-full resize-y rounded-md border border-line px-3 py-2 text-sm outline-none focus:border-accent"
               name="body"
-              defaultValue={target.lastOutboundBody ?? ""}
+              defaultValue={target.draft?.body ?? target.lastOutboundBody ?? ""}
               required
             />
           </label>

@@ -12,6 +12,7 @@ import {
 } from "@/modules/core/db/schema";
 import { endOfTodayIso, startOfTodayIso } from "@/modules/core/dates";
 import { isTargetActionBlocked } from "@/modules/outreach/status";
+import { getEmailDraft } from "@/modules/smtp/drafts";
 
 export type TargetListItem = Awaited<ReturnType<typeof getTargets>>[number];
 export type FollowupListItem = Awaited<ReturnType<typeof getFollowups>>[number];
@@ -171,6 +172,7 @@ export function getDashboardData() {
 
   return {
     stats: {
+      totalTargets: (sqlite.prepare("SELECT COUNT(*) AS count FROM targets").get() as { count: number }).count,
       repliesNeedingAction: replyCount.count,
       followupsDue: dueFollowups.length,
       overdueFollowups: overdueFollowups.length,
@@ -1016,5 +1018,5 @@ export function getSendTarget(targetId: string | undefined) {
       }
     | undefined;
 
-  return row ? { ...row, doNotResend: Boolean(row.doNotResend) } : null;
+  return row ? { ...row, doNotResend: Boolean(row.doNotResend), draft: getEmailDraft(row.id) } : null;
 }

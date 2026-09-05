@@ -45,7 +45,7 @@ export function AppShell({
           </div>
           <div>
             <div className="font-semibold">ReachLog</div>
-            <div className="text-xs text-muted">Outreach command center</div>
+            <div className="text-xs text-muted">Outreach tracker</div>
           </div>
         </div>
         <nav className="space-y-1 p-3">
@@ -88,7 +88,7 @@ export function AppShell({
                 </div>
                 <div>
                   <div className="font-semibold">ReachLog</div>
-                  <div className="text-xs text-muted">Outreach command center</div>
+                  <div className="text-xs text-muted">Outreach tracker</div>
                 </div>
               </div>
               <button
@@ -130,7 +130,7 @@ export function AppShell({
       <div className="md:pl-64">
         {demoMode && (
           <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-900 md:px-6">
-            Demo mode: sends and external integrations are simulated.
+            Demo: sample data. Emails stay here; nothing is sent.
           </div>
         )}
 
@@ -156,6 +156,7 @@ export function AppShell({
               />
               <input
                 className="h-10 w-full rounded-md border border-line bg-panel pl-9 pr-3 text-sm outline-none transition focus:border-accent focus:bg-white"
+                aria-label="Search targets"
                 name="q"
                 placeholder="Search email, domain, company..."
                 type="search"

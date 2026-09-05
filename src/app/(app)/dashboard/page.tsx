@@ -31,13 +31,29 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   const sendTarget = getSendTarget(params?.sendTargetId);
   const sendFeedback = getSendFeedback(params);
 
+  if (!data.stats.totalTargets) {
+    return (
+      <section className="max-w-2xl rounded-lg border border-line bg-white p-6 shadow-sm">
+        <h1 className="text-2xl font-semibold">Start tracking your outreach</h1>
+        <p className="mt-3 text-sm text-muted">
+          Add someone you want to contact, or import your existing list. Replies and follow-ups will appear here.
+        </p>
+        <div className="mt-5 flex flex-wrap gap-3">
+          <Link className="rounded-md bg-ink px-4 py-2 text-sm font-medium text-white" href="/targets?showCreate=1">Add your first target</Link>
+          <Link className="rounded-md border border-line px-4 py-2 text-sm font-medium" href="/import">Import a CSV</Link>
+        </div>
+        <p className="mt-5 text-sm text-muted">You can track outreach without connecting email. Set up sending and mailbox sync in Settings when you need them.</p>
+      </section>
+    );
+  }
+
   return (
     <>
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Dashboard</h1>
           <p className="mt-1 text-sm text-muted">
-            Replies, follow-ups, and recent mailbox movement.
+            See who replied and who needs a follow-up.
           </p>
         </div>
       </div>
@@ -68,7 +84,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
         />
         <MetricCard
           icon={AlertTriangle}
-          label="Send anomalies"
+          label="Sending needs review"
           tone="rose"
           value={data.stats.failedSends}
         />
@@ -77,7 +93,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       {data.failedSends.length > 0 && (
         <section className="mt-6 rounded-lg border border-rose-200 bg-white shadow-sm">
           <div className="border-b border-rose-100 px-4 py-3">
-            <h2 className="font-semibold text-rose-800">Send Anomalies</h2>
+            <h2 className="font-semibold text-rose-800">Sending needs review</h2>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-[820px] text-sm">
@@ -130,7 +146,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
 
       <section className="mt-6 rounded-lg border border-line bg-white shadow-sm">
         <div className="flex items-center justify-between border-b border-line px-4 py-3">
-          <h2 className="font-semibold">Replies Needing Action</h2>
+          <h2 className="font-semibold">Replies needing action</h2>
           <Link className="text-sm font-medium text-accent" href="/targets">
             View targets
           </Link>
@@ -169,7 +185,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
 
       <section className="mt-6 rounded-lg border border-line bg-white shadow-sm">
         <div className="flex items-center justify-between border-b border-line px-4 py-3">
-          <h2 className="font-semibold">Follow-ups Due</h2>
+          <h2 className="font-semibold">Follow-ups due</h2>
           <Link className="text-sm font-medium text-accent" href="/followups">
             Open queue
           </Link>
