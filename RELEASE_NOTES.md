@@ -1,28 +1,23 @@
-# ReachLog 0.2.0
+# ReachLog 0.2.1
 
-This release adds background scheduling, guided connection setup, and reusable email templates. See [CHANGELOG.md](CHANGELOG.md) for the full change list.
+This patch improves send recovery, follow-up visibility, scheduler status, exports and search. See [CHANGELOG.md](CHANGELOG.md) for the full change list.
 
-## Start using the new features
+## What to try
 
-1. Open **Settings → Connections**. Save SMTP, IMAP, or Telegram details and test the connection. Enable the features you want to use. IMAP can discover available mailboxes; Proton Bridge presets fill in local connection defaults.
-2. Open **Settings → Background tasks**. Enable mailbox sync, follow-up reminders, or database backups and choose their intervals. Schedules run only while ReachLog is running. The page shows their latest run, last success, next run, and any failure.
-3. Open **Templates**. Save a subject and message with `{{contact_name}}`, `{{company}}`, `{{email}}`, or `{{website}}`. Preview and apply a template in the composer, then edit the message before sending. Missing variables block sending but can remain in saved drafts.
+1. **Dashboard → Sending needs review:** use **Save to history** for email your mail server accepted but ReachLog could not save. It records the email without sending again. Newer replies, drafts and follow-ups are preserved. Sending to that recipient stays blocked until the earlier send is saved or marked checked.
+2. **Follow-ups:** the navigation shows a due count even without Telegram. Settings explains the reminder fallback and background task states.
+3. **Targets:** export contacts as CSV or JSON, including verification state and linked target counts. Header search also finds message text and contact form submissions.
+4. **Before restoring a backup:** run `reachlog verify-backup /path/to/backup.sqlite.gz`. Check the reported schema and counts. Damaged archives and files missing ReachLog tables fail with a non-zero exit status.
 
-## Upgrading from 0.1.0
+## Upgrading from 0.2.0
 
-- Keep the existing data directory and back up the database before upgrading. Migration 0007 preserves existing records and adds templates and schedule state.
-- All built-in schedules start paused. Existing cron and systemd jobs remain supported; use `--no-scheduler` or `REACHLOG_SCHEDULER_ENABLED=false` when retaining those jobs.
-- Environment and `.env` values still take precedence. Those fields appear read-only in the UI. Remove a connection's environment values and restart to manage it in Settings instead.
-- Saved connection credentials live in `connections.json` outside the package installation. They use owner-only POSIX file permissions and are never returned in browser responses. They are not part of SQLite backups, so protect and back up that file separately.
-- Node.js 22 or 24 is required. This release keeps the existing locked dependency versions.
-
-Connection verification does not send email or Telegram notifications. The separate **Send test notification** action sends a message to the configured chat. SMTP verification checks the connection and login; sender acceptance is determined when an email is sent.
+- Keep the existing data directory and back up the database before upgrading. There is no new migration; the schema remains at 0007.
+- Existing schedule settings are preserved. New schedules start paused, and missed intervals are not replayed.
+- Back up `connections.json` and `.env` separately; they are not included in SQLite backups.
+- Node.js 22 or 24 is required. Dependency versions are unchanged.
 
 ## Verification
 
-- Node.js 24.20.0: type checking, lint, all 17 test cases, production build, and package inspection passed.
-- A fresh tarball installation passed HTTP checks for persistence, exports, backups, isolated demo data, and authentication.
-- Chrome passed template editing, client and server validation, connection setup and verification, scheduled backups, restart persistence, manual sending to a local SMTP fixture, and desktop/mobile layout checks. Screenshots were inspected; no browser errors remained.
-- The development launcher and packaged scheduler opt-out passed startup, configuration, scheduler-state, and shutdown checks. SMTP/IMAP use local fixtures and Telegram uses mocked responses; live provider accounts were not contacted.
-
-The repository remains private. No npm publication or public GitHub release is part of this update.
+- Node.js 24.18.0: typecheck, lint, all 24 tests, production build and package inspection passed.
+- Installed the 0.2.1 tarball in an empty folder and checked it with headless Chrome: send recovery preserved the newer reply, draft and follow-up; navigation badges, message search, contacts CSV/JSON, all application pages, backups and backup verification passed.
+- Desktop and mobile screenshots were inspected. No browser runtime errors, failed application requests or server-action origin warnings occurred. The checks used disposable local data with external integrations disabled.

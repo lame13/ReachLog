@@ -225,6 +225,8 @@ export function getTargets(filters: TargetFilters = {}) {
     )
     .all() as TargetListRow[];
 
+  const relatedMatches = filters.q ? findRelatedMatches(filters.q) : null;
+
   return rows.filter((target) => {
     const q = filters.q?.trim().toLowerCase();
     const status = filters.status?.trim();
@@ -247,7 +249,7 @@ export function getTargets(filters: TargetFilters = {}) {
         .join(" ")
         .toLowerCase();
 
-      if (!haystack.includes(q)) {
+      if (!haystack.includes(q) && !relatedMatches?.has(target.id)) {
         return false;
       }
     }
@@ -274,6 +276,46 @@ export function getTargets(filters: TargetFilters = {}) {
 
     return true;
   });
+}
+
+/**
+ * Matches message text and contact form submissions so the header search covers
+ * more than the columns shown in the target list. `%` and `_` are escaped so a
+ * search for them looks for those characters instead of acting as wildcards.
+ */
+function findRelatedMatches(query: string) {
+  const escaped = query
+    .trim()
+    .toLowerCase()
+    .replace(/[\\%_]/g, (match) => `\\${match}`);
+  const pattern = `%${escaped}%`;
+
+  const rows = getSqlite()
+    .prepare(
+      `
+      SELECT DISTINCT threads.target_id as targetId
+      FROM messages
+      INNER JOIN threads ON threads.id = messages.thread_id
+      WHERE lower(messages.subject) LIKE ? ESCAPE '\\'
+        OR lower(COALESCE(messages.body_text, '')) LIKE ? ESCAPE '\\'
+        OR lower(messages.from_email) LIKE ? ESCAPE '\\'
+        OR lower(messages.to_email) LIKE ? ESCAPE '\\'
+      UNION
+      SELECT DISTINCT contact_form_submissions.target_id as targetId
+      FROM contact_form_submissions
+      WHERE lower(contact_form_submissions.message_text) LIKE ? ESCAPE '\\'
+        OR lower(contact_form_submissions.form_url) LIKE ? ESCAPE '\\'
+    `
+    )
+    .all(pattern, pattern, pattern, pattern, pattern, pattern) as Array<{
+    targetId: string;
+  }>;
+
+  return new Set(rows.map((row) => row.targetId));
+}
+
+export function getDueFollowupCount() {
+  return getFollowups("due").length;
 }
 
 export function getTargetFilterOptions() {

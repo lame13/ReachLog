@@ -30,10 +30,12 @@ const navItems = [
 
 export function AppShell({
   children,
-  demoMode = false
+  demoMode = false,
+  dueFollowups = 0
 }: {
   children: React.ReactNode;
   demoMode?: boolean;
+  dueFollowups?: number;
 }) {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -68,6 +70,9 @@ export function AppShell({
               >
                 <Icon className="size-4" aria-hidden="true" />
                 {item.label}
+                <FollowupBadge
+                  count={item.href === "/followups" ? dueFollowups : 0}
+                />
               </Link>
             );
           })}
@@ -121,6 +126,9 @@ export function AppShell({
                   >
                     <Icon className="size-4" aria-hidden="true" />
                     {item.label}
+                    <FollowupBadge
+                      count={item.href === "/followups" ? dueFollowups : 0}
+                    />
                   </Link>
                 );
               })}
@@ -158,9 +166,9 @@ export function AppShell({
               />
               <input
                 className="h-10 w-full rounded-md border border-line bg-panel pl-9 pr-3 text-sm outline-none transition focus:border-accent focus:bg-white"
-                aria-label="Search targets"
+                aria-label="Search targets, messages and contact forms"
                 name="q"
-                placeholder="Search email, domain, company..."
+                placeholder="Search company, email, message text..."
                 type="search"
               />
             </form>
@@ -169,5 +177,25 @@ export function AppShell({
         <main className="mx-auto max-w-7xl px-4 py-6 md:px-6">{children}</main>
       </div>
     </div>
+  );
+}
+
+function FollowupBadge({ count }: { count: number }) {
+  if (count <= 0) {
+    return null;
+  }
+
+  return (
+    <>
+      <span
+        className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-100 px-1.5 text-xs font-medium text-amber-900"
+        aria-hidden="true"
+      >
+        {count > 99 ? "99+" : count}
+      </span>
+      <span className="sr-only">
+        {count === 1 ? "1 follow-up due" : `${count} follow-ups due`}
+      </span>
+    </>
   );
 }

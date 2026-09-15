@@ -7,6 +7,7 @@ import {
 
 export const exportEntities = [
   "targets",
+  "contacts",
   "messages",
   "followups",
   "events",
@@ -23,6 +24,10 @@ export function isExportEntity(value: string): value is ExportEntity {
 export function getExportRows(entity: ExportEntity, params: URLSearchParams) {
   if (entity === "targets") {
     return getTargetsExport(params);
+  }
+
+  if (entity === "contacts") {
+    return getContactsExport(params);
   }
 
   if (entity === "messages") {
@@ -115,6 +120,32 @@ function getMessagesExport(params: URLSearchParams) {
     `
     )
     .all(...values) as Record<string, unknown>[];
+}
+
+function getContactsExport(params: URLSearchParams) {
+  const domain = params.get("domain");
+
+  return getSqlite()
+    .prepare(
+      `
+      SELECT
+        contacts.id,
+        contacts.name,
+        contacts.email,
+        contacts.domain,
+        contacts.email_verification_provider as emailVerificationProvider,
+        contacts.email_verification_status as emailVerificationStatus,
+        contacts.email_verification_checked_at as emailVerificationCheckedAt,
+        contacts.email_verification_error as emailVerificationError,
+        (SELECT COUNT(*) FROM targets WHERE targets.contact_id = contacts.id) as targetCount,
+        contacts.created_at as createdAt,
+        contacts.updated_at as updatedAt
+      FROM contacts
+      ${domain ? "WHERE lower(contacts.domain) = lower(?)" : ""}
+      ORDER BY contacts.name ASC, contacts.email ASC
+    `
+    )
+    .all(...(domain ? [domain] : [])) as Record<string, unknown>[];
 }
 
 function getFollowupsExport(params: URLSearchParams) {

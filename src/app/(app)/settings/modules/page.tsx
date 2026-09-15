@@ -39,6 +39,9 @@ export default function SettingsPage() {
             "followup-check": scheduleBlocker("followup-check"),
             backup: scheduleBlocker("backup"),
           }}
+          remindersAvailable={Boolean(
+            env.TELEGRAM_ENABLED && env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID
+          )}
           demo={env.DEMO_MODE}
         />
         <p className="text-xs text-muted">

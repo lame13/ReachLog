@@ -12,7 +12,9 @@ const variants: Record<string, string> = {
   cancelled: "border-gray-200 bg-gray-50 text-gray-600",
   completed: "border-gray-200 bg-gray-50 text-gray-600",
   dead: "border-gray-300 bg-gray-100 text-gray-700",
-  "do not resend": "border-rose-200 bg-rose-50 text-rose-800"
+  "do not resend": "border-rose-200 bg-rose-50 text-rose-800",
+  "send failed": "border-rose-200 bg-rose-50 text-rose-800",
+  "not saved": "border-amber-200 bg-amber-50 text-amber-800"
 };
 
 export function StatusPill({

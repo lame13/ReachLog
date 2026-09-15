@@ -53,6 +53,8 @@ For identities requiring separate SMTP credentials, append `::username::password
 
 The app sends only when you submit a message. Saving a draft stores the subject, body and selected sender locally. A successful send removes that draft. A failed send retains it. Do-not-contact and blocked-address checks still apply.
 
+If your mail server accepts a message but ReachLog cannot finish writing its local record, the send appears under **Sending needs review** on the dashboard. Use **Save to history** to record the accepted message without sending it again, or **Mark checked** once you have handled it another way. Sending to that contact stays blocked until one of the two is done. Recovered messages keep the original sender and timestamp, and no follow-up is scheduled automatically.
+
 ## IMAP
 
 ```dotenv
@@ -122,13 +124,22 @@ reachlog worker backup
 
 Backups are consistent SQLite snapshots, compressed with Node.js. No `sqlite3` or `gzip` command is needed. Each filename is unique, including repeated backups on the same day. Backups are retained until you remove them.
 
+Check an archive before restoring it:
+
+```sh
+reachlog verify-backup ~/.reachlog/backups/app-2026-09-06T09-00-00-000Z-1a2b3c4d.sqlite.gz
+```
+
+The command decompresses the archive into a temporary folder, runs SQLite's integrity check, and prints the schema version plus the number of contacts, targets, threads, messages, open follow-ups and recorded sends. It never writes to your live database or configuration, exits with a non-zero status for damaged archives or missing ReachLog tables, and removes the temporary copy afterwards. Compare the record counts with the installation you are replacing before you swap directories.
+
 Optional `B2_REMOTE` runs `rclone copy` after the local backup. This requires an installed and configured `rclone` and transmits the backups to that destination. It is disabled by default.
 
 To restore:
 
 1. Stop ReachLog and its scheduled tasks.
-2. Decompress the chosen `.sqlite.gz` backup into a new directory as `app.sqlite`.
-3. Start `reachlog --data-dir /path/to/restored-directory` with connections disabled and inspect the records.
-4. Add the appropriate configuration and resume work only after verifying the restoration.
+2. Run `reachlog verify-backup /path/to/chosen-backup.sqlite.gz` and confirm the reported counts match what you expect.
+3. Decompress the chosen `.sqlite.gz` backup into a new directory as `app.sqlite`.
+4. Start `reachlog --data-dir /path/to/restored-directory` with connections disabled and inspect the records.
+5. Add the appropriate configuration and resume work only after verifying the restoration.
 
 Keep the previous database intact until the restoration is verified. Do not copy an open SQLite database with a plain file copy while writes may be in progress.

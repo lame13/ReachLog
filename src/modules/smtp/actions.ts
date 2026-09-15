@@ -21,6 +21,13 @@ import {
   getMessageIdDomain,
   selectSmtpIdentity
 } from "@/modules/smtp/from-identities";
+import {
+  getUnsavedAcceptedSend,
+  hasUnsavedAcceptedSend,
+  markSendRecordRecovered,
+  messageRecordExists,
+  recoverSenderAddress
+} from "./recover-send";
 
 export async function saveDraftAction(formData: FormData) {
   const targetId = String(formData.get("targetId") ?? "");
@@ -110,6 +117,20 @@ export async function sendNowAction(formData: FormData) {
         blockedEmailVerification,
         emailVerificationStatus: target?.emailVerificationStatus
       })
+    );
+  }
+
+  if (hasUnsavedAcceptedSend(targetId)) {
+    createTargetEvent(targetId, "send_blocked", {
+      reason: "unsaved_accepted_send",
+      subject
+    });
+    revalidateAfterSend(targetId);
+    redirectWithSendFeedback(
+      returnTo,
+      targetId,
+      "error",
+      "An earlier email to this contact was accepted by your mail server but is not in your history yet. Open Sending needs review on the dashboard to save it or mark it checked before sending again."
     );
   }
 
@@ -310,7 +331,7 @@ type SendableTarget = {
   lastMessageId: string | null;
 };
 
-function getSendableTarget(targetId: string) {
+function getSendableTarget(targetId: string, threadId: string | null = null) {
   return getSqlite()
     .prepare(
       `
@@ -333,11 +354,12 @@ function getSendableTarget(targetId: string) {
       LEFT JOIN contacts ON contacts.id = targets.contact_id
       LEFT JOIN threads ON threads.target_id = targets.id
       WHERE targets.id = ?
+        AND (? IS NULL OR threads.id = ?)
       ORDER BY threads.updated_at DESC
       LIMIT 1
     `
     )
-    .get(targetId) as SendableTarget | undefined;
+    .get(targetId, threadId, threadId) as SendableTarget | undefined;
 }
 
 function persistSentEmail({
@@ -350,7 +372,9 @@ function persistSentEmail({
   outboundSendId,
   rawResult,
   createFollowup,
-  followupDays
+  followupDays,
+  sentAt,
+  recovering = false
 }: {
   target: SendableTarget & { contactEmail: string };
   subject: string;
@@ -362,9 +386,11 @@ function persistSentEmail({
   rawResult: Pick<SentMessageInfo, "accepted" | "rejected" | "response">;
   createFollowup: boolean;
   followupDays: number;
+  sentAt?: string;
+  recovering?: boolean;
 }) {
   const sqlite = getSqlite();
-  const now = new Date().toISOString();
+  const now = sentAt ?? new Date().toISOString();
   const threadId = target.threadId ?? createId("thread");
   const dueAt = new Date();
   dueAt.setDate(dueAt.getDate() + followupDays);
@@ -396,6 +422,22 @@ function persistSentEmail({
           now,
           now
         );
+    } else if (recovering) {
+      // Backfilling history must not rewind a newer reply or follow-up.
+      sqlite.prepare(`
+        UPDATE threads
+        SET last_message_id = CASE
+              WHEN COALESCE(last_inbound_at, '') <= ? AND COALESCE(last_outbound_at, '') <= ?
+              THEN ? ELSE last_message_id END,
+            last_outbound_at = MAX(COALESCE(last_outbound_at, ''), ?),
+            next_followup_at = (
+              SELECT MIN(due_at) FROM followup_tasks
+              WHERE thread_id = ? AND status = 'open' AND created_at > ?
+            ),
+            status = CASE WHEN updated_at <= ? THEN 'waiting' ELSE status END,
+            updated_at = MAX(updated_at, ?)
+        WHERE id = ?
+      `).run(now, now, messageId, now, threadId, now, now, now, threadId);
     } else {
       sqlite
         .prepare(
@@ -427,6 +469,7 @@ function persistSentEmail({
           sent_at, received_at, raw_headers_json, created_at
         )
         VALUES (?, ?, 'outbound', ?, ?, NULL, NULL, ?, ?, NULL, ?, ?, ?, ?, NULL, ?, ?)
+        ON CONFLICT(message_id) DO NOTHING
       `
       )
       .run(
@@ -449,25 +492,30 @@ function persistSentEmail({
       );
 
     sqlite
-      .prepare("UPDATE targets SET status = 'sent', updated_at = ? WHERE id = ?")
-      .run(now, target.id);
+      .prepare("UPDATE targets SET status = 'sent', updated_at = ? WHERE id = ? AND (? = 0 OR updated_at <= ?)")
+      .run(now, target.id, Number(recovering), now);
 
-    clearEmailDraft(target.id);
+    if (recovering) {
+      sqlite.prepare("DELETE FROM email_drafts WHERE target_id = ? AND updated_at <= ? AND subject = ? AND body = ?")
+        .run(target.id, now, subject, body);
+    } else {
+      clearEmailDraft(target.id);
+    }
 
     sqlite
       .prepare(
         `
         UPDATE outbound_sends
         SET thread_id = ?,
-            status = 'sent',
-            attempts = attempts + 1,
+            status = CASE WHEN ? = 1 THEN status ELSE 'sent' END,
+            attempts = attempts + ?,
             sent_at = ?,
             last_error = NULL,
             updated_at = ?
         WHERE id = ?
       `
       )
-      .run(threadId, now, now, outboundSendId);
+      .run(threadId, Number(recovering), recovering ? 0 : 1, now, now, outboundSendId);
 
     const completedFollowups = sqlite
       .prepare(
@@ -477,9 +525,10 @@ function persistSentEmail({
             completed_at = ?
         WHERE target_id = ?
           AND status = 'open'
+          AND (? = 0 OR created_at <= ?)
       `
       )
-      .run(now, target.id).changes;
+      .run(now, target.id, Number(recovering), now).changes;
 
     if (createFollowup) {
       sqlite
@@ -508,19 +557,30 @@ function persistSentEmail({
       from: fromEmail,
       messageId,
       subject
-    });
+    }, now);
 
     if (completedFollowups > 0) {
       createTargetEvent(target.id, "followup_sent", {
         completedFollowups,
         messageId
-      });
+      }, now);
     }
 
     if (createFollowup) {
       createTargetEvent(target.id, "followup_scheduled", {
         dueAt: dueAt.toISOString(),
         followupDays
+      });
+    }
+
+    if (recovering) {
+      markSendRecordRecovered({
+        outboundSendId,
+        targetId: target.id,
+        messageId,
+        subject,
+        resolution: "recovered_from_smtp_delivery",
+        sentAt: now
       });
     }
   });
@@ -704,7 +764,8 @@ function createLocalMessageId(fromEmail: string) {
 function createTargetEvent(
   targetId: string,
   eventType: string,
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
+  createdAt = new Date().toISOString()
 ) {
   getSqlite()
     .prepare(
@@ -715,6 +776,111 @@ function createTargetEvent(
       targetId,
       eventType,
       JSON.stringify(payload),
-      new Date().toISOString()
+      createdAt
     );
+}
+
+/**
+ * Stores a message SMTP already accepted when writing its local record failed.
+ * The email is not sent again, and no new follow-up is scheduled.
+ */
+export async function completeAcceptedSendAction(formData: FormData) {
+  const outboundSendId = String(formData.get("outboundSendId") ?? "");
+  const targetId = String(formData.get("targetId") ?? "");
+  const send =
+    outboundSendId && targetId
+      ? getUnsavedAcceptedSend(outboundSendId, targetId)
+      : undefined;
+
+  if (!send) {
+    redirectWithDashboardFeedback(
+      "info",
+      "That send is already resolved or no longer waiting for a saved record."
+    );
+  }
+
+  if (messageRecordExists(send.messageId)) {
+    markSendRecordRecovered({
+      outboundSendId: send.id,
+      targetId: send.targetId,
+      messageId: send.messageId,
+      subject: send.subject,
+      resolution: "message_already_saved",
+      sentAt: send.sentAt
+    });
+    revalidateAfterSend(send.targetId);
+    redirectWithDashboardFeedback(
+      "success",
+      "That email was already in your history. Nothing was sent again."
+    );
+  }
+
+  const target = getSendableTarget(send.targetId, send.threadId);
+
+  if (!target) {
+    redirectWithDashboardFeedback(
+      "error",
+      "ReachLog could not find the contact for this send."
+    );
+  }
+
+  const fromEmail = recoverSenderAddress(send.targetId, send.id);
+  if (!fromEmail) {
+    redirectWithDashboardFeedback("error", "The original sender is missing from the send history. Check the email in your mailbox before marking it checked.");
+  }
+  const sentAt = send.sentAt ?? send.createdAt;
+  const previousMessage = getSqlite().prepare(`
+    SELECT message_id AS messageId FROM messages
+    WHERE thread_id = ? AND COALESCE(sent_at, received_at, created_at) <= ?
+    ORDER BY COALESCE(sent_at, received_at, created_at) DESC LIMIT 1
+  `).get(target.threadId, sentAt) as { messageId: string } | undefined;
+
+  try {
+    persistSentEmail({
+      target: { ...target, contactEmail: send.toEmail },
+      subject: send.subject,
+      body: send.bodyText,
+      fromEmail,
+      messageId: send.messageId,
+      replyToMessageId: previousMessage?.messageId,
+      outboundSendId: send.id,
+      rawResult: {
+        accepted: [send.toEmail],
+        rejected: [],
+        response: "recovered_after_persist_failure"
+      },
+      createFollowup: false,
+      followupDays: 0,
+      sentAt,
+      recovering: true
+    });
+  } catch (error) {
+    createTargetEvent(send.targetId, "send_record_recovery_failed", {
+      messageId: send.messageId,
+      error: error instanceof Error ? error.message : "unknown_error"
+    });
+    revalidateAfterSend(send.targetId);
+    redirectWithDashboardFeedback(
+      "error",
+      `ReachLog could not save the record: ${
+        error instanceof Error ? error.message : "unknown error"
+      }`
+    );
+  }
+
+  revalidateAfterSend(send.targetId);
+  redirectWithDashboardFeedback(
+    "success",
+    "Saved the accepted email to the contact history. Nothing was sent again. Add a follow-up if you still need one."
+  );
+}
+
+function redirectWithDashboardFeedback(
+  status: "error" | "info" | "success",
+  message: string
+): never {
+  const url = new URL("/dashboard", "https://reachlog.local");
+  url.searchParams.set("sendStatus", status);
+  url.searchParams.set("sendMessage", message.slice(0, 700));
+  redirect(`${url.pathname}${url.search}`);
 }

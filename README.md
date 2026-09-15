@@ -41,6 +41,7 @@ Demo uses a separate database. It records simulated sends locally and never conn
 - Schedule mailbox sync, follow-up reminders, and database backups while the app is running.
 - Connect SMTP for individual sends and IMAP for replies and sent messages. Proton Bridge is supported.
 - Export contacts, messages, follow-ups and history as CSV or JSON.
+- Search company names, contacts, message text and contact form submissions from the header.
 - Optionally verify addresses with EmailListVerify and receive Telegram notifications.
 - Back up SQLite without stopping the app.
 
@@ -49,6 +50,8 @@ ReachLog does not send campaigns automatically. It has no team accounts, hosted 
 ## Your data
 
 By default, the CLI stores your database in `~/.reachlog/app.sqlite` and backups in `~/.reachlog/backups/`. Updating or reinstalling the npm package does not move or delete them.
+
+Backups are compressed SQLite snapshots. Check one before restoring it with `reachlog verify-backup <file>`, which reports the integrity check, schema version and record counts without touching your live data.
 
 Choose a different location or port:
 

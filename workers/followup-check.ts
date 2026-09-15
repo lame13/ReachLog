@@ -48,7 +48,7 @@ async function checkFollowups() {
 
   if (!env.TELEGRAM_ENABLED) {
     console.log(
-      `followup-check: ${dueFollowups.length} due, Telegram disabled; notifications not stamped`
+      `followup-check: ${dueFollowups.length} due, Telegram disabled; due follow-ups stay visible in the app`
     );
     return;
   }
@@ -70,7 +70,7 @@ async function checkFollowups() {
           WHERE id = ?
         `
         )
-        .run(now, result.sent ? "telegram" : "local", result.reason, followup.id);
+        .run(now, "telegram", result.reason, followup.id);
     }
 
     sqlite

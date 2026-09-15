@@ -74,6 +74,7 @@ export default async function TargetsPage({ searchParams }: PageProps) {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <ExportLinks entity="targets" label="Targets" params={exportParams} />
+          <ExportLinks entity="contacts" label="Contacts" />
           <ExportLinks entity="messages" label="Mail" />
           <Link
             className="inline-flex h-10 items-center gap-2 rounded-md bg-ink px-3 text-sm font-medium text-white"

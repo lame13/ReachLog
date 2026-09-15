@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { config as loadEnv } from "dotenv";
+import { verifyBackupFile } from "./modules/core/db/verify-backup";
 
 const usage = `ReachLog — keep track of outreach, replies and follow-ups.
 
@@ -12,6 +13,7 @@ Usage:
   reachlog [start] [options]
   reachlog demo [options]
   reachlog worker <name> [options]
+  reachlog verify-backup <file>
 
 Options:
   --port <number>       Local port (default: 3000; or PORT)
@@ -25,6 +27,7 @@ Options:
 Workers: mail-sync, mail-resync, list-mailboxes, followup-check,
          email-verify, backup
 
+verify-backup checks a compressed backup before you restore it.
 Demo uses its own database and never sends email or notifications.
 Workers run once. Enable built-in schedules and configure connections in Settings.
 Scheduled tasks run only while ReachLog is running.`;
@@ -55,6 +58,14 @@ function main() {
   }
 
   const command = positionals[0] ?? "start";
+  if (command === "verify-backup") {
+    const file = positionals[1];
+    if (!file || positionals.length > 2) {
+      throw new Error("Usage: reachlog verify-backup <backup-file>");
+    }
+    reportBackupVerification(file);
+    return;
+  }
   const workerNames = new Set([
     "mail-sync", "mail-resync", "list-mailboxes", "followup-check", "email-verify", "backup"
   ]);
@@ -170,6 +181,33 @@ function main() {
     stopBackground();
     process.exitCode = code ?? (signal === "SIGINT" ? 130 : signal === "SIGTERM" ? 143 : 1);
   });
+}
+
+function reportBackupVerification(file: string) {
+  const result = verifyBackupFile(file);
+  const count = (value: number | null) =>
+    value === null ? "missing" : String(value);
+
+  console.log(`Backup verified: ${result.file}`);
+  console.log(`  Integrity check: ${result.integrity}`);
+  console.log(
+    `  Schema version: ${result.schemaVersion ?? "unknown"}${
+      result.schemaName ? ` (${result.schemaName})` : ""
+    }`
+  );
+  console.log(
+    `  Records: contacts ${count(result.counts.contacts)}, targets ${count(
+      result.counts.targets
+    )}, threads ${count(result.counts.threads)}, messages ${count(
+      result.counts.messages
+    )}, open follow-ups ${count(result.counts.openFollowups)}, outbound sends ${count(
+      result.counts.outboundSends
+    )}`
+  );
+
+  if (result.integrity !== "ok") {
+    process.exitCode = 1;
+  }
 }
 
 try {

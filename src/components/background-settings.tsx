@@ -13,11 +13,13 @@ export function BackgroundSettings({
   schedules,
   running,
   blockers,
+  remindersAvailable,
   demo,
 }: {
   schedules: Schedule[];
   running: boolean;
   blockers: Record<ScheduleName, string | null>;
+  remindersAvailable: boolean;
   demo: boolean;
 }) {
   const router = useRouter();
@@ -46,9 +48,14 @@ export function BackgroundSettings({
           </span>
         </div>
         <p className="mt-2 text-sm text-muted">
-          Choose which tasks run automatically while ReachLog is running.
-          Pausing a schedule stops future runs; a task already running can
-          finish.
+          Choose which tasks run automatically while ReachLog is running. New
+          schedules start paused; upgrades keep your existing settings. Pausing
+          stops future runs while a task already running can finish.
+        </p>
+        <p className="mt-2 text-sm text-muted">
+          Run now queues the task for the next scheduler tick, usually within
+          five seconds. A task that comes due while ReachLog is stopped runs
+          once at the next start; missed intervals are not replayed.
         </p>
         {!running && !demo && (
           <p className="mt-2 text-sm text-amber-800">
@@ -64,6 +71,11 @@ export function BackgroundSettings({
             schedule={schedule}
             running={running}
             blocker={blockers[schedule.name]}
+            hint={
+              schedule.name === "followup-check" && !remindersAvailable
+                ? "Without Telegram, due follow-ups still appear in ReachLog: the Follow-ups queue lists them and the sidebar shows a count."
+                : null
+            }
             demo={demo}
           />
         ))}
@@ -76,11 +88,13 @@ function ScheduleForm({
   schedule,
   running,
   blocker,
+  hint,
   demo,
 }: {
   schedule: Schedule;
   running: boolean;
   blocker: string | null;
+  hint: string | null;
   demo: boolean;
 }) {
   const router = useRouter();
@@ -102,7 +116,32 @@ function ScheduleForm({
   const [pending, startTransition] = useTransition();
   const definition = scheduleDefinitions[schedule.name];
   const stamp = (value: string | null) =>
-    value ? `${value.slice(0, 19).replace("T", " ")} UTC` : "Not yet";
+    value ? `${value.slice(0, 19).replace("T", " ")} UTC` : "Never run";
+  const statusLabel =
+    schedule.lastStatus === "running"
+      ? "Running now"
+      : !schedule.enabled
+        ? "Paused"
+        : schedule.lastStatus === "failed"
+          ? "Enabled · last run failed"
+          : schedule.lastStatus === "never"
+            ? "Enabled · never run"
+            : schedule.lastStatus === "skipped"
+              ? "Enabled · last run skipped"
+              : schedule.lastStatus === "interrupted"
+                ? "Enabled · last run interrupted"
+                : "Enabled";
+  const statusTone =
+    schedule.lastStatus === "running"
+      ? "bg-sky-50 text-sky-800"
+      : !schedule.enabled || schedule.lastStatus === "never"
+        ? "bg-panel text-muted"
+        : schedule.lastStatus === "failed"
+          ? "bg-rose-50 text-rose-800"
+          : schedule.lastStatus === "skipped" ||
+              schedule.lastStatus === "interrupted"
+            ? "bg-amber-50 text-amber-800"
+            : "bg-emerald-50 text-emerald-800";
   function act(operation: "save" | "run") {
     const form = new FormData();
     form.set("enabled", enabled ? "on" : "off");
@@ -129,15 +168,14 @@ function ScheduleForm({
           <h3 className="font-medium">{definition.title}</h3>
           <p className="mt-1 text-sm text-muted">{definition.description}</p>
         </div>
-        <span className="rounded-md bg-panel px-2 py-1 text-xs">
-          {schedule.lastStatus === "running"
-            ? "Running now"
-            : schedule.enabled
-              ? "Scheduled"
-              : "Paused"}
+        <span
+          className={`rounded-md px-2 py-1 text-xs font-medium ${statusTone}`}
+        >
+          {statusLabel}
         </span>
       </div>
       {blocker && <p className="text-sm text-amber-800">{blocker}</p>}
+      {hint && <p className="text-sm text-muted">{hint}</p>}
       {visibleResult && (
         <p
           role={visibleResult.ok ? "status" : "alert"}
@@ -158,16 +196,24 @@ function ScheduleForm({
         </p>
       )}
       <div className="grid gap-2 text-xs text-muted sm:grid-cols-3">
+        <p>Last started: {stamp(schedule.lastStartedAt)}</p>
+        <p>Last success: {schedule.lastSuccessAt ? stamp(schedule.lastSuccessAt) : "No successful run yet"}</p>
         <p>
-          Last run: {stamp(schedule.lastStartedAt)}
-          {schedule.lastStatus !== "never" && ` (${schedule.lastStatus})`}
-        </p>
-        <p>Last success: {stamp(schedule.lastSuccessAt)}</p>
-        <p>
-          Next run: {schedule.enabled ? stamp(schedule.nextRunAt) : "Paused"}
-          {schedule.enabled && !running ? " · waiting for scheduler" : ""}
+          Next run:{" "}
+          {schedule.enabled
+            ? running
+              ? schedule.lastStatus === "running"
+                ? "After this run finishes"
+                : schedule.nextRunAt ? stamp(schedule.nextRunAt) : "Not scheduled"
+              : "Waiting for the scheduler"
+            : "Not scheduled while paused"}
         </p>
       </div>
+      {!schedule.enabled && !demo && (
+        <p className="text-xs text-muted">
+          Enable {definition.title.toLowerCase()} to use Run now.
+        </p>
+      )}
       <div className="flex flex-wrap items-end gap-4">
         <label className="flex h-10 items-center gap-2 text-sm font-medium">
           <input

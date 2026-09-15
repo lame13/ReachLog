@@ -15,7 +15,13 @@ import { markDeadAction, snoozeFollowupAction } from "@/modules/followups/action
 import { isTargetActionBlocked } from "@/modules/outreach/status";
 import { isEmailVerificationBlocking } from "@/modules/emailVerification/service";
 import { resolveSendAnomalyAction } from "@/modules/smtp/anomaly-actions";
+import { completeAcceptedSendAction } from "@/modules/smtp/actions";
 import { getSendFeedback } from "@/modules/smtp/feedback";
+
+const sendStatusLabels: Record<string, string> = {
+  failed: "send failed",
+  smtp_accepted_persist_failed: "not saved"
+};
 
 type PageProps = {
   searchParams?: Promise<{
@@ -90,10 +96,31 @@ export default async function DashboardPage({ searchParams }: PageProps) {
         />
       </div>
 
+      {sendFeedback && !sendTarget && (
+        <p
+          role="status"
+          className={`mt-6 rounded-lg border p-4 text-sm ${
+            sendFeedback.tone === "success"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+              : sendFeedback.tone === "info"
+                ? "border-sky-200 bg-sky-50 text-sky-900"
+                : "border-rose-200 bg-rose-50 text-rose-900"
+          }`}
+        >
+          {sendFeedback.message}
+        </p>
+      )}
+
       {data.failedSends.length > 0 && (
         <section className="mt-6 rounded-lg border border-rose-200 bg-white shadow-sm">
           <div className="border-b border-rose-100 px-4 py-3">
             <h2 className="font-semibold text-rose-800">Sending needs review</h2>
+            <p className="mt-1 text-sm text-rose-900">
+              A message your mail server accepted but ReachLog could not save is
+              listed as not saved. Save it to history to record it without
+              sending again, or mark it checked once you have handled it another
+              way. Sending to that contact stays blocked until you do.
+            </p>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-[820px] text-sm">
@@ -119,7 +146,9 @@ export default async function DashboardPage({ searchParams }: PageProps) {
                     <td className="px-4 py-3 text-muted">{send.toEmail}</td>
                     <td className="px-4 py-3">{send.subject}</td>
                     <td className="px-4 py-3">
-                      <StatusPill status={send.status} />
+                      <StatusPill
+                        status={sendStatusLabels[send.status] ?? send.status}
+                      />
                     </td>
                     <td className="px-4 py-3 text-rose-700">
                       {send.lastError ?? "unknown"}
@@ -128,13 +157,40 @@ export default async function DashboardPage({ searchParams }: PageProps) {
                       {formatDateTime(send.updatedAt)}
                     </td>
                     <td className="px-4 py-3">
-                      <form action={resolveSendAnomalyAction}>
-                        <input name="outboundSendId" type="hidden" value={send.id} />
-                        <input name="targetId" type="hidden" value={send.targetId} />
-                        <button className="h-9 rounded-md border border-rose-200 px-3 text-xs font-medium text-rose-800 hover:bg-rose-50">
-                          Mark checked
-                        </button>
-                      </form>
+                      <div className="flex flex-wrap gap-2">
+                        {send.status === "smtp_accepted_persist_failed" && (
+                          <form action={completeAcceptedSendAction}>
+                            <input
+                              name="outboundSendId"
+                              type="hidden"
+                              value={send.id}
+                            />
+                            <input
+                              name="targetId"
+                              type="hidden"
+                              value={send.targetId}
+                            />
+                            <button className="h-9 rounded-md bg-ink px-3 text-xs font-medium text-white">
+                              Save to history
+                            </button>
+                          </form>
+                        )}
+                        <form action={resolveSendAnomalyAction}>
+                          <input
+                            name="outboundSendId"
+                            type="hidden"
+                            value={send.id}
+                          />
+                          <input
+                            name="targetId"
+                            type="hidden"
+                            value={send.targetId}
+                          />
+                          <button className="h-9 rounded-md border border-rose-200 px-3 text-xs font-medium text-rose-800 hover:bg-rose-50">
+                            Mark checked
+                          </button>
+                        </form>
+                      </div>
                     </td>
                   </tr>
                 ))}

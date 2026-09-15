@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.2.1 — 2026-09-15
+
+### Added
+
+- **Save to history** on the dashboard for email SMTP accepted but ReachLog could not record. Recovery saves the original sender, recipient and send date without sending again or scheduling another follow-up.
+- A due follow-up count in desktop and mobile navigation, with guidance for using the app without Telegram reminders.
+- Contacts exports in CSV and JSON, including email verification state and linked target counts.
+- `reachlog verify-backup <file>` to check a compressed SQLite backup, report its schema and record counts, and reject damaged or incomplete backups before restoring.
+
+### Changed
+
+- Header search includes message subjects, bodies and addresses, plus contact form text and URLs. Search treats `%`, `_` and backslashes literally.
+- Background tasks distinguish paused, enabled, never run, failed, skipped and interrupted states, with clearer timestamps and Run now behavior.
+- Send review distinguishes failed sends from accepted messages missing their local records, and records the outcome of manual review.
+
+### Fixed
+
+- Sending to a recipient with an unresolved accepted send is blocked, including through another target for that recipient.
+- Recovering older email preserves newer replies, target state, drafts and follow-ups; it uses the original thread and does not count recovery as another SMTP attempt. Recovery and its audit event commit together, and repeating recovery does not duplicate the message.
+- Recovery refuses to guess a missing original sender from current SMTP settings, and links sends whose messages are already in history.
+- Restored send events use the original send date so activity totals do not count them as new sends today.
+- Removed the unreachable local notification channel and corrected the worker message when Telegram is disabled.
+- ESLint ignores runtime copies under `.data/` so local captured packages do not break release checks.
+
+### Upgrade
+
+- No new database migration or dependency changes. The schema remains at 0007, and existing schedule settings are preserved.
+- Keep your data directory and back up the database before upgrading. Protect `connections.json` and `.env` separately from SQLite backups.
+
 ## 0.2.0 — 2026-09-06
 
 ### Added

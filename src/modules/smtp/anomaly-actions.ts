@@ -75,7 +75,10 @@ export async function resolveSendAnomalyAction(formData: FormData) {
           subject: send.subject,
           previousStatus: send.status,
           previousError: send.lastError,
-          resolution: "manual_confirmed_sent"
+          resolution:
+            send.status === "failed"
+              ? "manual_review_send_failed"
+              : "manual_confirmed_already_sent"
         }),
         now
       );
