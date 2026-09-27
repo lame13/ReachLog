@@ -1,23 +1,26 @@
-# ReachLog 0.2.1
+# ReachLog 0.3.0
 
-This patch improves send recovery, follow-up visibility, scheduler status, exports and search. See [CHANGELOG.md](CHANGELOG.md) for the full change list.
+ReachLog now shows where to open the app, where your database lives and how to
+stop it. If a port is busy, it explains how to choose another.
 
-## What to try
+Pages have loading and error screens, with a retry button and details to include
+in a bug report. Unknown addresses have links back to the dashboard and targets.
 
-1. **Dashboard → Sending needs review:** use **Save to history** for email your mail server accepted but ReachLog could not save. It records the email without sending again. Newer replies, drafts and follow-ups are preserved. Sending to that recipient stays blocked until the earlier send is saved or marked checked.
-2. **Follow-ups:** the navigation shows a due count even without Telegram. Settings explains the reminder fallback and background task states.
-3. **Targets:** export contacts as CSV or JSON, including verification state and linked target counts. Header search also finds message text and contact form submissions.
-4. **Before restoring a backup:** run `reachlog verify-backup /path/to/backup.sqlite.gz`. Check the reported schema and counts. Damaged archives and files missing ReachLog tables fail with a non-zero exit status.
+The Targets table is simpler: duplicate keys have moved to a tooltip on the
+company name, and sources link to the original post or website when available.
+Duplicate keys are still included in exports.
 
-## Upgrading from 0.2.0
+The README includes screenshots and instructions for trying the demo:
 
-- Keep the existing data directory and back up the database before upgrading. There is no new migration; the schema remains at 0007.
-- Existing schedule settings are preserved. New schedules start paused, and missed intervals are not replayed.
-- Back up `connections.json` and `.env` separately; they are not included in SQLite backups.
-- Node.js 22 or 24 is required. Dependency versions are unchanged.
+```sh
+npx reachlog demo
+```
 
-## Verification
+Open the address printed in the terminal. The demo uses its own database and
+does not send email or connect to a mailbox.
 
-- Node.js 24.18.0: typecheck, lint, all 24 tests, production build and package inspection passed.
-- Installed the 0.2.1 tarball in an empty folder and checked it with headless Chrome: send recovery preserved the newer reply, draft and follow-up; navigation badges, message search, contacts CSV/JSON, all application pages, backups and backup verification passed.
-- Desktop and mobile screenshots were inspected. No browser runtime errors, failed application requests or server-action origin warnings occurred. The checks used disposable local data with external integrations disabled.
+## Upgrading from 0.2.1
+
+There is no new database migration; the schema remains at 0007. Keep your data
+directory and configuration in place. Your records and schedule settings are
+preserved. Node.js 22 or 24 is still required, and dependencies are unchanged.

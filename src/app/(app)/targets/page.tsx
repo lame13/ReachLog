@@ -174,7 +174,6 @@ export default async function TargetsPage({ searchParams }: PageProps) {
                 <th className="px-4 py-3 font-medium">Contact</th>
                 <th className="px-4 py-3 font-medium">Domain</th>
                 <th className="px-4 py-3 font-medium">Source</th>
-                <th className="px-4 py-3 font-medium">Dedupe</th>
                 <th className="px-4 py-3 font-medium">Status</th>
                 <th className="px-4 py-3 font-medium">Action</th>
               </tr>
@@ -182,6 +181,14 @@ export default async function TargetsPage({ searchParams }: PageProps) {
             <tbody>
               {targets.length ? (
                 targets.map((target) => {
+                  const sourceUrl = [target.sourceUrl, target.websiteUrl].find((value) => {
+                    if (!value) return false;
+                    try {
+                      return ["http:", "https:"].includes(new URL(value).protocol);
+                    } catch {
+                      return false;
+                    }
+                  });
                   const canSend =
                     Boolean(target.contactEmail) &&
                     !isTargetActionBlocked(target) &&
@@ -190,7 +197,11 @@ export default async function TargetsPage({ searchParams }: PageProps) {
                   return (
                   <tr key={target.id} className="border-t border-line align-top">
                     <td className="px-4 py-3">
-                      <Link className="font-medium" href={`/targets/${target.id}`}>
+                      <Link
+                        className="font-medium"
+                        href={`/targets/${target.id}`}
+                        title={`Duplicate key: ${target.dedupeKey}`}
+                      >
                         {target.companyName}
                       </Link>
                       <div className="mt-1 text-xs text-muted">
@@ -201,11 +212,20 @@ export default async function TargetsPage({ searchParams }: PageProps) {
                       {target.contactEmail ?? "form only"}
                     </td>
                     <td className="px-4 py-3">{target.domain ?? "unknown"}</td>
-                    <td className="px-4 py-3">{target.sourceType}</td>
                     <td className="px-4 py-3">
-                      <div className="max-w-64 truncate font-mono text-xs text-muted">
-                        {target.dedupeKey}
-                      </div>
+                      {sourceUrl ? (
+                        <a
+                          className="inline-block max-w-48 truncate text-accent hover:underline"
+                          href={sourceUrl}
+                          rel="noreferrer"
+                          target="_blank"
+                          title={sourceUrl}
+                        >
+                          {target.sourceType}
+                        </a>
+                      ) : (
+                        target.sourceType
+                      )}
                       {target.sourceType === "contact_form" && (
                         <div className="mt-2 inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-800">
                           <AlertTriangle className="size-3.5" />
@@ -237,7 +257,7 @@ export default async function TargetsPage({ searchParams }: PageProps) {
                 })
               ) : (
                 <tr className="border-t border-line">
-                  <td className="px-4 py-10 text-center text-muted" colSpan={7}>
+                  <td className="px-4 py-10 text-center text-muted" colSpan={6}>
                     No targets match these filters.
                   </td>
                 </tr>

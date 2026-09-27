@@ -4,11 +4,23 @@ Keep track of who you contacted, what you sent, who replied and when to follow u
 
 ReachLog is a self-hosted app for one person. It runs on your machine, opens in your browser and stores its data in SQLite. You can use it without connecting an email account.
 
-## Start
+![The targets list, with status and source filters](https://raw.githubusercontent.com/lame13/ReachLog/master/docs/images/targets.png)
 
-Requires **Node.js 22 or 24** and npm. The SQLite dependency may need a C++ build toolchain on platforms without a prebuilt binary.
+## Try the demo
 
-After publication:
+```sh
+npx reachlog demo
+```
+
+Requires **Node.js 22 or 24** and npm. Open <http://127.0.0.1:3000> to explore
+sample contacts, replies and follow-ups. The demo uses its own database and
+records simulated sends locally; it never sends email, syncs a mailbox or sends
+notifications.
+
+The SQLite dependency may need a C++ build toolchain if a prebuilt binary is not
+available for your platform.
+
+## Start tracking your outreach
 
 ```sh
 npx reachlog
@@ -23,13 +35,21 @@ npm install --global reachlog
 reachlog
 ```
 
-Try sample data:
+ReachLog prints the address to open and where its database lives. Press Ctrl+C to
+stop it. If a port is already busy it says so and suggests another one instead of
+failing with a stack trace.
 
-```sh
-reachlog demo
-```
+## When ReachLog is useful
 
-Demo uses a separate database. It records simulated sends locally and never connects to email or notification services.
+If your outreach spreadsheet is getting hard to keep up with, ReachLog brings
+contacts, conversation history and follow-ups into one place. Each target can
+include the post or website where you found it. Connect email when you want
+replies and sent messages to appear automatically, or keep recording outreach
+by hand.
+
+ReachLog is free, open source and built for one person managing their own outreach.
+
+![Analytics by source, with daily outreach, replies and follow-ups](https://raw.githubusercontent.com/lame13/ReachLog/master/docs/images/analytics.png)
 
 ## What it does
 
@@ -81,7 +101,7 @@ reachlog worker followup-check
 reachlog worker backup
 ```
 
-Open **Settings → Background tasks** to enable schedules, choose intervals, run a task now, and check the last run, last success, next run, or failure. Schedules start paused, including after an upgrade. They run only while ReachLog is running. An overdue task runs once after restart; missed intervals are not replayed. Follow-up notifications do not send follow-up emails.
+Open **Settings → Background tasks** to enable schedules, choose intervals, run a task now, and check the last run, last success, next run, or failure. New schedules start paused; upgrades preserve your existing settings. They run only while ReachLog is running. An overdue task runs once after restart; missed intervals are not replayed. Follow-up notifications do not send follow-up emails.
 
 For an existing cron or systemd setup, start with `reachlog --no-scheduler` or `REACHLOG_SCHEDULER_ENABLED=false`. One-shot worker commands remain available and share worker locks with built-in scheduling.
 
@@ -115,6 +135,14 @@ npm start
 ```
 
 `npm start` uses the packaged CLI and its persistent data directory. [Development and release notes](docs/development.md) explain packaging and verification.
+
+## Feedback and support
+
+Found a bug or got stuck setting it up? [Open an issue](https://github.com/lame13/ReachLog/issues)
+with what you were doing, your Node.js version and your operating system. Include
+the error screen's technical details and any relevant terminal output, with
+passwords and personal data removed. See [CHANGELOG.md](CHANGELOG.md) for changes
+and upgrade notes.
 
 ## License
 

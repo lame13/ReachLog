@@ -13,6 +13,9 @@ npm run build
 npm start
 ```
 
+Use **Node.js 22 or 24**, as specified in `package.json`. Select a supported
+version before installing dependencies and running the checks.
+
 `npm run dev` runs source development and the scheduler on localhost. Schedules remain paused until enabled in Settings. Use `REACHLOG_SCHEDULER_ENABLED=false` for an externally scheduled development setup. `npm run demo:dev` uses sample data with connections and scheduling disabled. `npm run demo:reset` deletes the demo database and rebuilds it; never point that command at real data.
 
 The development launcher loads Next's environment files before starting either process, so `.env.local` and `.env.development` settings apply to both the app and scheduler. `DOTENV_CONFIG_PATH` can select an external configuration file.
@@ -37,7 +40,7 @@ In a different, empty directory:
 
 ```sh
 npm init -y
-npm install /absolute/path/to/reachlog-0.2.0.tgz
+npm install '/absolute/path/to/reachlog-<version>.tgz'
 npx --no-install reachlog --data-dir ./test-data
 ```
 
@@ -53,11 +56,26 @@ node scripts/smoke-browser.mjs /absolute/path/to/node_modules/reachlog
 
 The browser script owns its test database, local SMTP fixture, application process, and browser profile, and cleans them up afterward. It exercises templates, missing-variable handling, drafts, connection validation and verification, scheduled backups, restart persistence, authentication, and desktop/mobile layouts. `REACHLOG_PLAYWRIGHT_MODULE` and `REACHLOG_PLAYWRIGHT_TEST_MODULE` can point to an existing Playwright `index.mjs` and `test.mjs`; `REACHLOG_QA_CHROME` selects an installed Chrome executable. `REACHLOG_QA_OUTPUT` retains screenshots and failure evidence in a directory you choose. No tools or browsers are downloaded by this script.
 
-## Record a private repository release
+## Publish a release
 
-Update `package.json`, both root version fields in `npm-shrinkwrap.json`, `CHANGELOG.md`, and `RELEASE_NOTES.md`. Run the checks and install and exercise the resulting archive outside the checkout. After verification, remove regenerable build caches and temporary test artifacts, then commit and create an annotated version tag.
+Update `package.json`, both root version fields in `npm-shrinkwrap.json`, `CHANGELOG.md`, and `RELEASE_NOTES.md`. Run the checks and install and exercise the resulting archive outside the checkout. Review and commit the release files, including any README images.
 
-Push the reviewed commit and tag to the existing private remote, and confirm that repository visibility remains private. This workflow does not publish to npm or create a public GitHub release. Keep framework security updates current.
+For 0.3.0, after committing on `master`:
+
+```sh
+git tag -a 0.3.0 -m "ReachLog 0.3.0"
+git push origin master
+git push origin 0.3.0
+npm publish --access public
+gh release create 0.3.0 --verify-tag --title "ReachLog 0.3.0" --notes-file RELEASE_NOTES.md
+```
+
+Sign in with `npm login` and `gh auth login` if needed. Tags use the version
+number without a `v`, matching earlier releases. Publishing from the checkout
+runs `prepack`: typecheck, lint, tests, a fresh build and package inspection.
+After publishing, check the version, links and screenshots on the npm page.
+
+Keep the `files` allowlist in `package.json` free of databases, connection files, private environment files and native binaries. `scripts/check-package.mjs` fails the build if any of them appear. Keep framework security updates current, and keep the release notes in `RELEASE_NOTES.md` short enough to read in a minute.
 
 ## Changes from the supplied private app
 

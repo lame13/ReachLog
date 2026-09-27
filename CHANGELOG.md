@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.3.0 — 2026-09-27
+
+### Added
+
+- Error screens with a **Try again** button and details to include in a bug report.
+- A loading placeholder and a 404 page with links back to the dashboard and targets.
+- A startup message with the address to open, the database location and how to stop ReachLog. If the port is busy, the CLI explains how to choose another.
+- Repository and issue tracker links on the npm page.
+
+### Changed
+
+- A simpler Targets table: hover over a company name to see its duplicate key, or click its source to open the original post or website. Duplicate keys remain in exports.
+- The README now includes screenshots and starts with the demo. Release instructions cover npm and GitHub.
+
+### Upgrade
+
+- No database migration. The schema remains at 0007.
+- Keep using your existing data directory. Your records and schedule settings are preserved.
+
 ## 0.2.1 — 2026-09-15
 
 ### Added

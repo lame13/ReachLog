@@ -1,6 +1,6 @@
 {
   "name": "reachlog",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "build": "node scripts/build-package.mjs",
@@ -60,6 +60,13 @@
   "description": "A local outreach tracker for contacts, replies and follow-ups, with optional SMTP and IMAP.",
   "license": "MIT",
   "author": "Niko",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lame13/ReachLog.git"
+  },
+  "bugs": {
+    "url": "https://github.com/lame13/ReachLog/issues"
+  },
   "homepage": "https://nikom.work/",
   "bin": {
     "reachlog": "dist/cli.cjs"

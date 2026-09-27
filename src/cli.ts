@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { createServer } from "node:net";
 import { homedir } from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
@@ -32,7 +33,7 @@ Demo uses its own database and never sends email or notifications.
 Workers run once. Enable built-in schedules and configure connections in Settings.
 Scheduled tasks run only while ReachLog is running.`;
 
-function main() {
+async function main() {
   const { values, positionals } = parseArgs({
     allowPositionals: true,
     options: {
@@ -50,10 +51,7 @@ function main() {
     return;
   }
   if (values.version) {
-    const pkg: { version: string } = JSON.parse(
-      readFileSync(path.join(__dirname, "../package.json"), "utf8")
-    );
-    console.log(pkg.version);
+    console.log(packageVersion());
     return;
   }
 
@@ -116,6 +114,7 @@ function main() {
   if (command !== "worker" && !existsSync(path.join(appDir, ".next/BUILD_ID"))) {
     throw new Error("The application build is missing. From the source checkout, run npm run build first.");
   }
+  if (command !== "worker") await assertPortAvailable(host, port);
   process.umask(0o077);
   mkdirSync(dataDir, { recursive: true, mode: 0o700 });
   const database = demo ? path.join(dataDir, "demo.sqlite") : path.resolve(dataDir, process.env.DATABASE_PATH ?? "app.sqlite");
@@ -146,7 +145,17 @@ function main() {
   const args = command === "worker"
     ? [path.join(__dirname, "workers", `${worker === "mail-resync" ? "mail-sync" : worker}.cjs`)]
     : [require.resolve("next/dist/bin/next"), "start", appDir, "--hostname", host, "--port", String(port)];
-  console.log(`ReachLog${demo ? " demo" : ""} · data: ${database}`);
+  console.log(`ReachLog${demo ? " demo" : ""} ${packageVersion()} · data: ${database}`);
+  if (command !== "worker") console.log(
+    [
+      "",
+      `  Open   ${appUrl}`,
+      "  Stop   press Ctrl+C",
+      demo
+        ? "  Demo   sample data; nothing is sent and connections stay off"
+        : "  Try it first?  npx reachlog demo  (separate database)"
+    ].join("\n")
+  );
   const child = spawn(process.execPath, args, { env: childEnv, cwd: dataDir, stdio: "inherit" });
   let stopping = false;
   let scheduler: ReturnType<typeof spawn> | undefined;
@@ -210,9 +219,54 @@ function reportBackupVerification(file: string) {
   }
 }
 
-try {
-  main();
-} catch (error) {
+function packageVersion() {
+  const pkg: { version: string } = JSON.parse(
+    readFileSync(path.join(__dirname, "../package.json"), "utf8")
+  );
+  return pkg.version;
+}
+
+/**
+ * Fails before starting Next.js so a busy port reports one actionable line
+ * instead of a raw EADDRINUSE stack trace.
+ */
+async function assertPortAvailable(host: string, port: number) {
+  const alternatePort = port < 1024 || port === 65535 ? 3000 : port + 1;
+  const retryHint = `Run the same command with --port ${alternatePort}, keeping your other options.`;
+  await new Promise<void>((resolve, reject) => {
+    const probe = createServer();
+    probe.once("error", (error: NodeJS.ErrnoException) => {
+      if (error.code === "EADDRINUSE") {
+        reject(
+          new Error(
+            `Port ${port} is already in use on ${host}. Stop the other process or choose another port. ${retryHint}`
+          )
+        );
+        return;
+      }
+      if (error.code === "EACCES" || error.code === "EPERM") {
+        reject(
+          new Error(
+            `This system did not allow ReachLog to listen on ${host}:${port}. Ports below 1024 may require extra permissions. ${retryHint}`
+          )
+        );
+        return;
+      }
+      if (error.code === "EADDRNOTAVAIL" || error.code === "ENOTFOUND") {
+        reject(
+          new Error(
+            `Cannot bind to ${host}. Use the default local address with --host 127.0.0.1.`
+          )
+        );
+        return;
+      }
+      reject(error);
+    });
+    probe.listen({ host, port }, () => probe.close(() => resolve()));
+  });
+}
+
+main().catch((error) => {
   console.error(`ReachLog: ${error instanceof Error ? error.message : "Could not start."}`);
   process.exitCode = 1;
-}
+});
