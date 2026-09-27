@@ -8,6 +8,7 @@
 - A loading placeholder and a 404 page with links back to the dashboard and targets.
 - A startup message with the address to open, the database location and how to stop ReachLog. If the port is busy, the CLI explains how to choose another.
 - Repository and issue tracker links on the npm page.
+- Tests and publishing report unsupported Node versions before loading SQLite. The checkout includes an `.nvmrc` for Node 24.
 
 ### Changed
 

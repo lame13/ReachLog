@@ -22,8 +22,9 @@
     "worker:followup-check": "node --import tsx workers/followup-check.ts",
     "worker:backup": "node --import tsx workers/backup.ts",
     "demo": "node dist/cli.cjs demo",
+    "pretest": "node scripts/check-node.mjs",
     "test": "node --import tsx --test tests/*.test.ts",
-    "prepack": "npm run typecheck && npm run lint && npm test && npm run build && node scripts/check-package.mjs"
+    "prepack": "node scripts/check-node.mjs && npm run typecheck && npm run lint && npm test && npm run build && node scripts/check-package.mjs"
   },
   "dependencies": {
     "better-sqlite3": "13.0.3",
@@ -67,7 +68,7 @@
   "bugs": {
     "url": "https://github.com/lame13/ReachLog/issues"
   },
-  "homepage": "https://nikom.work/",
+  "homepage": "https://nikocodes.com/software/reachlog/",
   "bin": {
     "reachlog": "dist/cli.cjs"
   },

@@ -14,7 +14,10 @@ npm start
 ```
 
 Use **Node.js 22 or 24**, as specified in `package.json`. Select a supported
-version before installing dependencies and running the checks.
+version before installing dependencies and running the checks. With nvm, run
+`nvm install && nvm use` in the checkout; `.nvmrc` selects Node 24. Tests and
+packaging stop with a clear message on unsupported versions. Node 20 can crash
+in the native SQLite dependency before the test runner reports a useful error.
 
 `npm run dev` runs source development and the scheduler on localhost. Schedules remain paused until enabled in Settings. Use `REACHLOG_SCHEDULER_ENABLED=false` for an externally scheduled development setup. `npm run demo:dev` uses sample data with connections and scheduling disabled. `npm run demo:reset` deletes the demo database and rebuilds it; never point that command at real data.
 
@@ -63,6 +66,7 @@ Update `package.json`, both root version fields in `npm-shrinkwrap.json`, `CHANG
 For 0.3.0, after committing on `master`:
 
 ```sh
+nvm use
 git tag -a 0.3.0 -m "ReachLog 0.3.0"
 git push origin master
 git push origin 0.3.0
@@ -72,7 +76,7 @@ gh release create 0.3.0 --verify-tag --title "ReachLog 0.3.0" --notes-file RELEA
 
 Sign in with `npm login` and `gh auth login` if needed. Tags use the version
 number without a `v`, matching earlier releases. Publishing from the checkout
-runs `prepack`: typecheck, lint, tests, a fresh build and package inspection.
+runs `prepack`: a Node version check, typecheck, lint, tests, a fresh build and package inspection.
 After publishing, check the version, links and screenshots on the npm page.
 
 Keep the `files` allowlist in `package.json` free of databases, connection files, private environment files and native binaries. `scripts/check-package.mjs` fails the build if any of them appear. Keep framework security updates current, and keep the release notes in `RELEASE_NOTES.md` short enough to read in a minute.

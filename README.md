@@ -146,4 +146,4 @@ and upgrade notes.
 
 ## License
 
-MIT. Built by [Niko](https://nikom.work/).
+MIT. Built by [Niko](https://nikocodes.com/software/reachlog/).
