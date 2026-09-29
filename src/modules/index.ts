@@ -44,6 +44,20 @@ export const modules = [
     jobs: []
   },
   {
+    key: "accounts",
+    label: "Accounts and contacts",
+    enabled: true,
+    envFlag: null,
+    jobs: []
+  },
+  {
+    key: "pipeline",
+    label: "Pipeline stages",
+    enabled: true,
+    envFlag: null,
+    jobs: []
+  },
+  {
     key: "analytics",
     label: "Analytics",
     enabled: true,

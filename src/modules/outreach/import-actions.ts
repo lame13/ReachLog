@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { findOrCreateAccount } from "@/modules/accounts/store";
 import { getSqlite } from "@/modules/core/db/client";
 import { createId } from "@/modules/core/ids";
 import {
@@ -22,6 +23,7 @@ import {
   parseSourceTimestampFromValues
 } from "@/modules/outreach/historical-timestamps";
 import { requestMailResync } from "@/modules/mailbox/resync-requests";
+import { stageFromLegacyStatus } from "@/modules/pipeline/stages";
 
 export async function previewCsvImportAction(
   _previousState: ImportActionState,
@@ -78,6 +80,9 @@ export async function commitCsvImportAction(
 
     revalidatePath("/dashboard");
     revalidatePath("/targets");
+    revalidatePath("/pipeline");
+    revalidatePath("/accounts");
+    revalidatePath("/contacts");
     revalidatePath("/analytics");
     revalidatePath("/import");
 
@@ -491,11 +496,19 @@ function insertImportRows(rows: ImportPreviewRow[]) {
       }
 
       const sourceAt = row.sourceTimestamp || now;
+      const accountId = findOrCreateAccount({
+        sqlite,
+        name: row.companyName,
+        domain: row.domain,
+        websiteUrl: row.websiteUrl,
+        now: sourceAt
+      });
       const contactId = row.email
         ? upsertContact({
             email: row.email,
             name: row.name || row.companyName,
             domain: row.domain,
+            accountId,
             now: sourceAt
           })
         : null;
@@ -527,21 +540,23 @@ function insertImportRows(rows: ImportPreviewRow[]) {
         .prepare(
           `
           INSERT INTO targets (
-            id, contact_id, company_name, website_url, source_type, source_url,
-            dedupe_key, status, do_not_resend, created_at, updated_at
+            id, contact_id, account_id, company_name, website_url, source_type,
+            source_url, dedupe_key, status, stage, do_not_resend, created_at, updated_at
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `
         )
         .run(
           targetId,
           contactId,
+          accountId,
           row.companyName,
           row.websiteUrl || null,
           row.sourceType,
           row.sourceUrl || null,
           row.dedupeKey,
           status,
+          stageFromLegacyStatus(status),
           row.doNotResend ? 1 : 0,
           sourceAt,
           sourceAt
@@ -652,18 +667,27 @@ function repairImportedTarget({
 }) {
   const sqlite = getSqlite();
   const status = row.status || (row.sourceType === "contact_form" ? "form submitted" : "new");
+  const accountId = findOrCreateAccount({
+    sqlite,
+    name: row.companyName,
+    domain: row.domain,
+    websiteUrl: row.websiteUrl,
+    now: sourceAt
+  });
 
   sqlite
     .prepare(
       `
       UPDATE targets
       SET contact_id = ?,
+          account_id = COALESCE(?, account_id),
           company_name = ?,
           website_url = ?,
           source_type = ?,
           source_url = ?,
           dedupe_key = ?,
           status = ?,
+          stage = ?,
           do_not_resend = ?,
           updated_at = ?
       WHERE id = ?
@@ -671,12 +695,14 @@ function repairImportedTarget({
     )
     .run(
       contactId,
+      accountId,
       row.companyName,
       row.websiteUrl || null,
       row.sourceType,
       row.sourceUrl || null,
       row.dedupeKey,
       status,
+      stageFromLegacyStatus(status),
       row.doNotResend ? 1 : 0,
       sourceAt,
       targetId
@@ -723,11 +749,13 @@ function upsertContact({
   email,
   name,
   domain,
+  accountId,
   now
 }: {
   email: string;
   name: string;
   domain: string;
+  accountId: string | null;
   now: string;
 }) {
   const sqlite = getSqlite();
@@ -740,12 +768,13 @@ function upsertContact({
       .prepare(
         `
         UPDATE contacts
-        SET email_verification_provider = COALESCE(email_verification_provider, 'emaillistverify'),
+        SET account_id = COALESCE(account_id, ?),
+            email_verification_provider = COALESCE(email_verification_provider, 'emaillistverify'),
             email_verification_status = COALESCE(email_verification_status, 'pending')
         WHERE id = ?
       `
       )
-      .run(existing.id);
+      .run(accountId, existing.id);
 
     return existing.id;
   }
@@ -756,13 +785,21 @@ function upsertContact({
     .prepare(
       `
       INSERT INTO contacts (
-        id, name, email, domain, email_verification_provider,
+        id, account_id, name, email, domain, email_verification_provider,
         email_verification_status, created_at, updated_at
       )
-      VALUES (?, ?, ?, ?, 'emaillistverify', 'pending', ?, ?)
+      VALUES (?, ?, ?, ?, ?, 'emaillistverify', 'pending', ?, ?)
     `
     )
-    .run(contactId, name, email, domain || email.split("@")[1] || "unknown", now, now);
+    .run(
+      contactId,
+      accountId,
+      name,
+      email,
+      domain || email.split("@")[1] || "unknown",
+      now,
+      now
+    );
 
   markContactEmailVerificationPending(contactId, now);
 

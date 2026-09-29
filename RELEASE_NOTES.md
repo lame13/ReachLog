@@ -1,26 +1,49 @@
-# ReachLog 0.3.0
+# ReachLog 0.4.0
 
-ReachLog now shows where to open the app, where your database lives and how to
-stop it. If a port is busy, it explains how to choose another.
+ReachLog now keeps companies and people as records of their own, and shows your
+outreach on a pipeline board. Accounts, contacts and targets each have an
+activity timeline, and the new fields are included in CSV and JSON exports.
 
-Pages have loading and error screens, with a retry button and details to include
-in a bug report. Unknown addresses have links back to the dashboard and targets.
+## Accounts and contacts
 
-The Targets table is simpler: duplicate keys have moved to a tooltip on the
-company name, and sources link to the original post or website when available.
-Duplicate keys are still included in exports.
+Every target already named a company. ReachLog now turns those companies into
+**accounts**: created for you when you add or import a target, and available on
+their own page with the contacts, targets, mail and notes that belong to them.
+Targets are matched to accounts by company domain, or by name when no domain is
+available.
 
-The README includes screenshots and instructions for trying the demo:
+**Contacts** get a list and a page of their own, with a title, phone, tags,
+links, notes and the account they belong to. Filter by search, domain, tag or
+account.
+
+## Pipeline
+
+Every target now has a stage: **New, Contacted, Replied, In conversation,
+Qualified, Won** or **Lost**. The new `/pipeline` page shows a column per stage,
+and moving a card updates the stage, keeps the outreach status in step, and
+records the move on the shared timeline. Moving a card to Lost cancels that
+target's open follow-ups, the same as marking it dead always did. The dashboard
+and Analytics count each stage.
+
+Existing send blocks stay in place when you move a card. The free-text status
+is still available and included in exports. Stages are managed by hand after
+the initial migration; mailbox sync does not move cards.
+
+## Read-only demo
+
+`reachlog demo` now lets you browse sample data without changing it. Editing,
+imports and sending are blocked. The package includes systemd, Caddy and nginx
+examples for hosting a public demo with `REACHLOG_DEMO_PUBLIC=true`.
+
+## Upgrading from 0.3.0
 
 ```sh
-npx reachlog demo
+npm install --global reachlog@0.4.0
 ```
 
-Open the address printed in the terminal. The demo uses its own database and
-does not send email or connect to a mailbox.
+Database migration 0008 runs on first start. Your companies become accounts,
+your existing statuses are translated into stages, and your records and history
+are retained. A stage you set by hand is never overwritten by a later start. Keep your
+data directory and back up your database first.
 
-## Upgrading from 0.2.1
-
-There is no new database migration; the schema remains at 0007. Keep your data
-directory and configuration in place. Your records and schedule settings are
-preserved. Node.js 22 or 24 is still required, and dependencies are unchanged.
+Node.js 22 or 24 is still required, and dependencies are unchanged.

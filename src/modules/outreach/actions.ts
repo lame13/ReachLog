@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { findOrCreateAccount } from "@/modules/accounts/store";
 import { getSqlite } from "@/modules/core/db/client";
 import { createId } from "@/modules/core/ids";
 import {
@@ -19,6 +20,12 @@ import {
   isDoNotResendHardBlock,
   isSendBlockedStatus
 } from "@/modules/outreach/status";
+import {
+  stageFromLegacyStatus,
+  isPipelineStage,
+  statusForStageMove
+} from "@/modules/pipeline/stages";
+import { recordEvent } from "@/modules/timeline/record";
 
 type TargetFormValues = {
   targetId?: string;
@@ -31,6 +38,7 @@ type TargetFormValues = {
   sourceUrl: string;
   dedupeKey: string;
   status: string;
+  stage: string;
   doNotResend: boolean;
   replyType: string;
   nextFollowupDate: string;
@@ -66,11 +74,19 @@ export async function createTargetAction(formData: FormData) {
   let contactIdToVerify: string | null = null;
 
   const transaction = sqlite.transaction(() => {
+    const accountId = findOrCreateAccount({
+      sqlite,
+      name: values.companyName,
+      domain: inferDomain(values),
+      websiteUrl: values.websiteUrl,
+      now
+    });
     const contactId = upsertContact({
       contactId: null,
       name: values.contactName || values.companyName,
       email: values.email,
       domain: inferDomain(values),
+      accountId,
       now
     });
     contactIdToVerify = contactId;
@@ -79,30 +95,39 @@ export async function createTargetAction(formData: FormData) {
       .prepare(
         `
         INSERT INTO targets (
-          id, contact_id, company_name, website_url, source_type, source_url,
-          dedupe_key, status, do_not_resend, created_at, updated_at
+          id, contact_id, account_id, company_name, website_url, source_type,
+          source_url, dedupe_key, status, stage, do_not_resend, created_at, updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `
       )
       .run(
         targetId,
         contactId,
+        accountId,
         values.companyName,
         values.websiteUrl || null,
         values.sourceType,
         values.sourceUrl || null,
         dedupeKey,
         values.status || "new",
+        isPipelineStage(values.stage) ? values.stage : stageFromLegacyStatus(values.status),
         values.doNotResend ? 1 : 0,
         now,
         now
       );
 
-    insertTargetEvent(targetId, "target_created", {
-      dedupeKey,
-      sourceType: values.sourceType,
-      sourceUrl: values.sourceUrl || null
+    recordEvent({
+      entityType: "target",
+      entityId: targetId,
+      eventType: "target_created",
+      payload: {
+        dedupeKey,
+        sourceType: values.sourceType,
+        sourceUrl: values.sourceUrl || null,
+        accountId,
+        stage: isPipelineStage(values.stage) ? values.stage : stageFromLegacyStatus(values.status)
+      }
     });
   });
 
@@ -110,6 +135,9 @@ export async function createTargetAction(formData: FormData) {
   await verifyContactEmailOnce({ contactId: contactIdToVerify, targetId });
   revalidatePath("/dashboard");
   revalidatePath("/targets");
+  revalidatePath("/pipeline");
+  revalidatePath("/accounts");
+  revalidatePath("/contacts");
   revalidatePath("/analytics");
   redirect(`/targets/${targetId}`);
 }
@@ -135,10 +163,15 @@ export async function updateTargetAction(formData: FormData) {
     .get(dedupeKey, targetId) as { id: string } | undefined;
 
   if (duplicateTarget) {
-    insertTargetEvent(targetId, "target_update_blocked", {
-      reason: "duplicate_dedupe_key",
-      dedupeKey,
-      duplicateTargetId: duplicateTarget.id
+    recordEvent({
+      entityType: "target",
+      entityId: targetId,
+      eventType: "target_update_blocked",
+      payload: {
+        reason: "duplicate_dedupe_key",
+        dedupeKey,
+        duplicateTargetId: duplicateTarget.id
+      }
     });
     revalidateTarget(targetId);
     return;
@@ -146,13 +179,36 @@ export async function updateTargetAction(formData: FormData) {
 
   let contactIdToVerify: string | null = null;
   const nextFollowupAt = getNextFollowupIso(values);
+  const nextStage = isPipelineStage(values.stage) ? values.stage : null;
+  const currentTarget = sqlite
+    .prepare("SELECT stage, status FROM targets WHERE id = ?")
+    .get(targetId) as { stage: string; status: string } | undefined;
+
+  if (!currentTarget) {
+    return;
+  }
+
+  // Changing the stage carries the outreach status with it, unless the status
+  // field was edited by hand in the same save.
+  const nextStatus =
+    nextStage && nextStage !== currentTarget.stage && values.status === currentTarget.status
+      ? statusForStageMove(currentTarget.status, nextStage, values.doNotResend)
+      : values.status || "new";
 
   const transaction = sqlite.transaction(() => {
+    const accountId = findOrCreateAccount({
+      sqlite,
+      name: values.companyName,
+      domain: inferDomain(values),
+      websiteUrl: values.websiteUrl,
+      now
+    });
     const contactId = upsertContact({
       contactId: values.contactId,
       name: values.contactName || values.companyName,
       email: values.email,
       domain: inferDomain(values),
+      accountId,
       now
     });
     contactIdToVerify = contactId;
@@ -162,12 +218,14 @@ export async function updateTargetAction(formData: FormData) {
         `
         UPDATE targets
         SET contact_id = ?,
+            account_id = COALESCE(?, account_id),
             company_name = ?,
             website_url = ?,
             source_type = ?,
             source_url = ?,
             dedupe_key = ?,
             status = ?,
+            stage = COALESCE(?, stage),
             do_not_resend = ?,
             updated_at = ?
         WHERE id = ?
@@ -175,22 +233,25 @@ export async function updateTargetAction(formData: FormData) {
       )
       .run(
         contactId,
+        accountId,
         values.companyName,
         values.websiteUrl || null,
         values.sourceType,
         values.sourceUrl || null,
         dedupeKey,
-        values.status || "new",
+        nextStatus,
+        nextStage,
         values.doNotResend ? 1 : 0,
         now,
         targetId
       );
 
     const targetHardBlocked =
-      isSendBlockedStatus(values.status) ||
+      nextStage === "lost" ||
+      isSendBlockedStatus(nextStatus) ||
       isDoNotResendHardBlock({
         doNotResend: values.doNotResend,
-        status: values.status
+        status: nextStatus
       });
     const currentOpenFollowup = sqlite
       .prepare(
@@ -269,15 +330,21 @@ export async function updateTargetAction(formData: FormData) {
         );
     }
 
-    insertTargetEvent(targetId, "target_updated", {
-      dedupeKey,
-      sourceType: values.sourceType,
-      status: values.status,
-      doNotResend: values.doNotResend,
-      replyType: values.replyType || null,
-      nextFollowupAt,
-      followupId,
-      note: values.note || null
+    recordEvent({
+      entityType: "target",
+      entityId: targetId,
+      eventType: "target_updated",
+      payload: {
+        dedupeKey,
+        sourceType: values.sourceType,
+        status: nextStatus,
+        stage: nextStage ?? currentTarget.stage,
+        doNotResend: values.doNotResend,
+        replyType: values.replyType || null,
+        nextFollowupAt,
+        followupId,
+        note: values.note || null
+      }
     });
   });
 
@@ -303,7 +370,7 @@ export async function updateDoNotResendAction(formData: FormData) {
     if (enabled) {
       sqlite
         .prepare(
-          "UPDATE targets SET do_not_resend = 1, status = 'dead', updated_at = ? WHERE id = ?"
+          "UPDATE targets SET do_not_resend = 1, status = 'dead', stage = 'lost', updated_at = ? WHERE id = ?"
         )
         .run(now, targetId);
 
@@ -324,11 +391,12 @@ export async function updateDoNotResendAction(formData: FormData) {
         .run(now, targetId);
     }
 
-    insertTargetEvent(
-      targetId,
-      enabled ? "do_not_resend_enabled" : "do_not_resend_disabled",
-      { enabled, cancelledFollowups }
-    );
+    recordEvent({
+      entityType: "target",
+      entityId: targetId,
+      eventType: enabled ? "do_not_resend_enabled" : "do_not_resend_disabled",
+      payload: { enabled, cancelledFollowups }
+    });
   });
 
   transaction();
@@ -343,7 +411,12 @@ export async function addTargetNoteAction(formData: FormData) {
     return;
   }
 
-  insertTargetEvent(targetId, "note_added", { note });
+  recordEvent({
+    entityType: "target",
+    entityId: targetId,
+    eventType: "note_added",
+    payload: { note }
+  });
 
   revalidateTarget(targetId);
 }
@@ -360,6 +433,7 @@ function getTargetFormValues(formData: FormData): TargetFormValues {
     sourceUrl: clean(formData.get("sourceUrl")),
     dedupeKey: clean(formData.get("dedupeKey")),
     status: clean(formData.get("status")) || "new",
+    stage: clean(formData.get("stage")),
     doNotResend: formData.get("doNotResend") === "on",
     replyType: clean(formData.get("replyType")),
     nextFollowupDate: clean(formData.get("nextFollowupDate")),
@@ -383,12 +457,14 @@ function upsertContact({
   name,
   email,
   domain,
+  accountId,
   now
 }: {
   contactId: string | null | undefined;
   name: string;
   email: string;
   domain: string;
+  accountId: string | null;
   now: string;
 }) {
   const sqlite = getSqlite();
@@ -408,13 +484,14 @@ function upsertContact({
         UPDATE contacts
         SET name = ?,
             domain = ?,
+            account_id = COALESCE(account_id, ?),
             email_verification_provider = COALESCE(email_verification_provider, 'emaillistverify'),
             email_verification_status = COALESCE(email_verification_status, 'pending'),
             updated_at = ?
         WHERE id = ?
       `
       )
-      .run(name, domain || email.split("@")[1] || "unknown", now, existing.id);
+      .run(name, domain || email.split("@")[1] || "unknown", accountId, now, existing.id);
     return existing.id;
   }
 
@@ -426,9 +503,24 @@ function upsertContact({
 
     sqlite
       .prepare(
-        "UPDATE contacts SET name = ?, email = ?, domain = ?, updated_at = ? WHERE id = ?"
+        `
+        UPDATE contacts
+        SET name = ?,
+            email = ?,
+            domain = ?,
+            account_id = COALESCE(account_id, ?),
+            updated_at = ?
+        WHERE id = ?
+      `
       )
-      .run(name, email, domain || email.split("@")[1] || "unknown", now, contactId);
+      .run(
+        name,
+        email,
+        domain || email.split("@")[1] || "unknown",
+        accountId,
+        now,
+        contactId
+      );
 
     if (emailChanged) {
       markContactEmailVerificationPending(contactId, now);
@@ -443,13 +535,21 @@ function upsertContact({
     .prepare(
       `
       INSERT INTO contacts (
-        id, name, email, domain, email_verification_provider,
+        id, account_id, name, email, domain, email_verification_provider,
         email_verification_status, created_at, updated_at
       )
-      VALUES (?, ?, ?, ?, 'emaillistverify', 'pending', ?, ?)
+      VALUES (?, ?, ?, ?, ?, 'emaillistverify', 'pending', ?, ?)
     `
     )
-    .run(newContactId, name, email, domain || email.split("@")[1] || "unknown", now, now);
+    .run(
+      newContactId,
+      accountId,
+      name,
+      email,
+      domain || email.split("@")[1] || "unknown",
+      now,
+      now
+    );
 
   return newContactId;
 }
@@ -494,27 +594,6 @@ function inferDomain(values: Pick<TargetFormValues, "email" | "websiteUrl" | "so
   }
 }
 
-function insertTargetEvent(
-  targetId: string,
-  eventType: string,
-  payload: Record<string, unknown>
-) {
-  getSqlite()
-    .prepare(
-      `
-      INSERT INTO events (id, entity_type, entity_id, event_type, payload_json, created_at)
-      VALUES (?, 'target', ?, ?, ?, ?)
-    `
-    )
-    .run(
-      createId("event"),
-      targetId,
-      eventType,
-      JSON.stringify(payload),
-      new Date().toISOString()
-    );
-}
-
 function clean(value: FormDataEntryValue | null) {
   return String(value ?? "").trim();
 }
@@ -522,6 +601,9 @@ function clean(value: FormDataEntryValue | null) {
 function revalidateTarget(targetId: string) {
   revalidatePath("/dashboard");
   revalidatePath("/targets");
+  revalidatePath("/pipeline");
+  revalidatePath("/accounts");
+  revalidatePath("/contacts");
   revalidatePath(`/targets/${targetId}`);
   revalidatePath("/analytics");
 }

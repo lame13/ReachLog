@@ -11,9 +11,15 @@ export const contacts = sqliteTable(
   "contacts",
   {
     id: text("id").primaryKey(),
+    accountId: text("account_id").references(() => accounts.id),
     name: text("name").notNull(),
     email: text("email").notNull(),
     domain: text("domain").notNull(),
+    title: text("title"),
+    phone: text("phone"),
+    linksJson: text("links_json"),
+    tags: text("tags"),
+    notes: text("notes"),
     emailVerificationProvider: text("email_verification_provider"),
     emailVerificationStatus: text("email_verification_status"),
     emailVerificationCheckedAt: text("email_verification_checked_at"),
@@ -24,7 +30,26 @@ export const contacts = sqliteTable(
   },
   (table) => ({
     emailUnique: uniqueIndex("contacts_email_unique").on(table.email),
-    domainIdx: index("contacts_domain_idx").on(table.domain)
+    domainIdx: index("contacts_domain_idx").on(table.domain),
+    accountIdx: index("contacts_account_idx").on(table.accountId)
+  })
+);
+
+export const accounts = sqliteTable(
+  "accounts",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    domain: text("domain"),
+    websiteUrl: text("website_url"),
+    dedupeKey: text("dedupe_key").notNull(),
+    notes: text("notes"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull()
+  },
+  (table) => ({
+    dedupeKeyUnique: uniqueIndex("accounts_dedupe_key_unique").on(table.dedupeKey),
+    domainIdx: index("accounts_domain_idx").on(table.domain)
   })
 );
 
@@ -33,12 +58,14 @@ export const targets = sqliteTable(
   {
     id: text("id").primaryKey(),
     contactId: text("contact_id").references(() => contacts.id),
+    accountId: text("account_id").references(() => accounts.id),
     companyName: text("company_name").notNull(),
     websiteUrl: text("website_url"),
     sourceType: text("source_type").notNull(),
     sourceUrl: text("source_url"),
     dedupeKey: text("dedupe_key").notNull(),
     status: text("status").notNull(),
+    stage: text("stage").notNull().default("new"),
     doNotResend: integer("do_not_resend", { mode: "boolean" })
       .notNull()
       .default(false),
@@ -50,7 +77,9 @@ export const targets = sqliteTable(
       table.dedupeKey
     ),
     contactIdx: index("targets_contact_idx").on(table.contactId),
-    statusIdx: index("targets_status_idx").on(table.status)
+    accountIdx: index("targets_account_idx").on(table.accountId),
+    statusIdx: index("targets_status_idx").on(table.status),
+    stageIdx: index("targets_stage_idx").on(table.stage)
   })
 );
 
@@ -289,7 +318,16 @@ export const moduleSettings = sqliteTable("module_settings", {
   updatedAt: text("updated_at").notNull()
 });
 
-export const contactsRelations = relations(contacts, ({ many }) => ({
+export const accountsRelations = relations(accounts, ({ many }) => ({
+  contacts: many(contacts),
+  targets: many(targets)
+}));
+
+export const contactsRelations = relations(contacts, ({ one, many }) => ({
+  account: one(accounts, {
+    fields: [contacts.accountId],
+    references: [accounts.id]
+  }),
   targets: many(targets),
   threads: many(threads)
 }));
@@ -298,6 +336,10 @@ export const targetsRelations = relations(targets, ({ one, many }) => ({
   contact: one(contacts, {
     fields: [targets.contactId],
     references: [contacts.id]
+  }),
+  account: one(accounts, {
+    fields: [targets.accountId],
+    references: [accounts.id]
   }),
   threads: many(threads),
   followups: many(followupTasks),

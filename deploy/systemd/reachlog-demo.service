@@ -1,0 +1,26 @@
+[Unit]
+Description=ReachLog read-only demo
+Documentation=https://github.com/lame13/ReachLog
+After=network.target
+
+[Service]
+Type=simple
+User=reachlog
+Group=reachlog
+WorkingDirectory=/opt/reachlog
+EnvironmentFile=/etc/reachlog-demo.env
+# `npm run build` writes dist/ and has to run as part of a deploy: the demo
+# command refuses to start without dist/app/.next/BUILD_ID.
+ExecStart=/usr/bin/node /opt/reachlog/dist/cli.cjs demo --host 127.0.0.1 --port 3001 --data-dir /var/lib/reachlog-demo
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+StateDirectory=reachlog-demo
+ProtectSystem=full
+ProtectHome=true
+ReadOnlyPaths=/opt/reachlog
+ReadWritePaths=/var/lib/reachlog-demo
+
+[Install]
+WantedBy=multi-user.target

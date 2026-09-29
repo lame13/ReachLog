@@ -1,8 +1,12 @@
 # ReachLog
 
-Keep track of who you contacted, what you sent, who replied and when to follow up.
+Keep track of who you contacted, what you sent, who replied and when to follow
+up — and where each company stands, from first contact to a signed job.
 
-ReachLog is a self-hosted app for one person. It runs on your machine, opens in your browser and stores its data in SQLite. You can use it without connecting an email account.
+ReachLog is a self-hosted app for one person. It runs on your machine, opens in
+your browser and stores its data in SQLite. You can use it without connecting an
+email account. Accounts, contacts and a pipeline keep the people and companies
+behind your outreach together.
 
 ![The targets list, with status and source filters](https://raw.githubusercontent.com/lame13/ReachLog/master/docs/images/targets.png)
 
@@ -13,12 +17,34 @@ npx reachlog demo
 ```
 
 Requires **Node.js 22 or 24** and npm. Open <http://127.0.0.1:3000> to explore
-sample contacts, replies and follow-ups. The demo uses its own database and
-records simulated sends locally; it never sends email, syncs a mailbox or sends
-notifications.
+sample accounts, contacts, replies and follow-ups. The demo is read-only and uses
+its own database. Editing, sending, mailbox sync and notifications are disabled.
 
 The SQLite dependency may need a C++ build toolchain if a prebuilt binary is not
 available for your platform.
+
+## Publish the demo
+
+You can also host the sample data as a public, read-only demo. Visitors can
+browse and export it, but cannot save changes, import data or send messages.
+Mailbox sync, Telegram and email verification stay off.
+
+After installing ReachLog globally, run it behind an HTTPS reverse proxy:
+
+```sh
+REACHLOG_DEMO_PUBLIC=true APP_URL=https://reachlog-demo.example.com \
+  reachlog demo --host 127.0.0.1 --port 3001 --data-dir /var/lib/reachlog-demo
+```
+
+`REACHLOG_DEMO_PUBLIC=true` is what allows the app to answer a public address
+without basic auth. Without it, a non-local address still requires
+`APP_BASIC_AUTH_*`, exactly as it does for a private installation. Keep the
+process on the loopback address. The package includes example configuration:
+`deploy/systemd/reachlog-demo.service`, `deploy/reachlog-demo.env.example`,
+`deploy/caddy/demo.Caddyfile.example` and `deploy/nginx/reachlog-demo.conf`.
+The systemd example assumes a source checkout built with
+`npm ci && npm run build` in `/opt/reachlog`, a `reachlog` system user and a
+configuration file at `/etc/reachlog-demo.env`.
 
 ## Start tracking your outreach
 
@@ -51,16 +77,37 @@ ReachLog is free, open source and built for one person managing their own outrea
 
 ![Analytics by source, with daily outreach, replies and follow-ups](https://raw.githubusercontent.com/lame13/ReachLog/master/docs/images/analytics.png)
 
+## Accounts, contacts and the pipeline
+
+Open **Pipeline** to see your targets grouped by stage. Move a card when its
+stage changes; mail sync does not move it for you. Moving a card updates the outreach status, records the change on the
+timeline, and cancels open follow-ups when you close something as Lost. **New
+target** and the CSV import put companies on the board for you.
+
+Open **Accounts** for the companies behind your outreach, and **Contacts** for
+the people. An account page collects its contacts, its targets, its mail and its
+own notes; a contact page collects the person's details, tags, links and
+history. Accounts are created automatically when a target names a company, and
+targets with the same company domain share one account. Without a domain,
+ReachLog matches the company name.
+
+Stages are a fixed set, so they can be counted in Analytics and used as filters.
+The free-text status that ReachLog has always had is still there for anything
+the stages do not cover.
+
 ## What it does
 
-- Track contacts, companies, outreach history and do-not-contact records.
+- Track companies as **accounts**, with the contacts, targets and notes that belong to each one.
+- Track people as **contacts**, with a title, phone, tags, links and their own history.
+- Move each target through a **pipeline**: New, Contacted, Replied, In conversation, Qualified, Won or Lost.
+- Track outreach history and do-not-contact records.
 - Import CSV files with a duplicate check before changes are made.
 - Save email drafts and schedule manual follow-ups.
 - Reuse email templates with contact variables, previews, and editable messages.
 - Configure and test SMTP, IMAP, and Telegram in Settings. Discover available mailboxes and use local Proton Bridge presets.
 - Schedule mailbox sync, follow-up reminders, and database backups while the app is running.
 - Connect SMTP for individual sends and IMAP for replies and sent messages. Proton Bridge is supported.
-- Export contacts, messages, follow-ups and history as CSV or JSON.
+- Export accounts, targets, contacts, messages, follow-ups and history as CSV or JSON.
 - Search company names, contacts, message text and contact form submissions from the header.
 - Optionally verify addresses with EmailListVerify and receive Telegram notifications.
 - Back up SQLite without stopping the app.
@@ -115,7 +162,8 @@ In the email composer, choose a template to preview it for the current contact. 
 
 The default listener is `127.0.0.1`. To use a network address, configure Basic Auth first. For internet access, place ReachLog behind an HTTPS reverse proxy and keep the application listener on localhost.
 
-This remains a single-owner application. Do not expose a demo or your contact database as a public website.
+Keep your real contact database private. The optional public demo uses separate
+sample data and blocks changes.
 
 ## From source
 

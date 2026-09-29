@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.4.0 — 2026-09-29
+
+### Added
+
+- **Accounts** collect a company's contacts, targets, mail and notes. Adding or
+  importing a target finds its account or creates one.
+- **Contact pages** for editing a person's title, phone, tags, links, notes and
+  account. Search the contacts list or filter it by domain, tag or account.
+- **Pipeline board** with seven stages: New, Contacted, Replied, In conversation,
+  Qualified, Won and Lost. Move targets between stages from the board or their
+  edit form. Moving to Lost cancels open follow-ups; existing send blocks stay in place.
+- **Activity timelines** on account, contact and target pages, including mail,
+  notes, form submissions, follow-ups and stage changes.
+- **Account exports** in CSV and JSON. Target and contact exports include the
+  new CRM fields and respect the page's filters.
+- Example systemd, Caddy and nginx configuration for hosting a public demo.
+
+### Changed
+
+- The navigation now has Pipeline, Accounts, Contacts and Targets. The dashboard
+  shows a pipeline summary, and Analytics counts each stage.
+- Contact email verification can be rechecked from the contact page, with or
+  without a target.
+- Demo mode is now read-only, locally and when hosted. Visitors can browse and
+  export sample data; editing, imports and sending are blocked.
+- The README explains the new pages and how to host the optional public demo.
+
+### Upgrade
+
+- Database migration 0008 adds `accounts`, `targets.stage`, `targets.account_id`
+  and the new contact fields. Existing records and history are retained.
+- Existing companies become accounts on first start: the company name, website
+  or contact domain is used, so two targets for the same company share one
+  account.
+- Existing statuses are translated into stages (`replied` becomes Replied,
+  `follow-up due` and `sent` become Contacted, `dead` becomes Lost, and so on).
+  A stage you set by hand is never overwritten by a later start.
+- The free-text status remains available and stays in exports. After the initial
+  migration, you move pipeline stages by hand; mailbox sync does not change them.
+- Keep your data directory and back up the database before upgrading. Node.js
+  22 or 24 is still required, and dependencies are unchanged.
+
 ## 0.3.0 — 2026-09-27
 
 ### Added

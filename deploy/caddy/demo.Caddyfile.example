@@ -1,0 +1,7 @@
+# The published read-only demo. The application itself refuses every request
+# that could change anything while DEMO_MODE is on, so the proxy carries no
+# authentication: a visitor can look at the product without an account.
+reachlog-demo.example.com {
+  encode zstd gzip
+  reverse_proxy 127.0.0.1:3001
+}

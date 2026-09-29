@@ -1,11 +1,14 @@
 import { getSqlite } from "@/modules/core/db/client";
 import { endOfTodayIso, startOfTodayIso } from "@/modules/core/dates";
+import { getAccounts } from "@/modules/accounts/queries";
+import { getContacts } from "@/modules/contacts/queries";
 import {
   getTargets,
   type TargetFilters
 } from "@/modules/outreach/queries";
 
 export const exportEntities = [
+  "accounts",
   "targets",
   "contacts",
   "messages",
@@ -24,6 +27,10 @@ export function isExportEntity(value: string): value is ExportEntity {
 export function getExportRows(entity: ExportEntity, params: URLSearchParams) {
   if (entity === "targets") {
     return getTargetsExport(params);
+  }
+
+  if (entity === "accounts") {
+    return getAccountsExport(params);
   }
 
   if (entity === "contacts") {
@@ -49,10 +56,36 @@ export function getExportRows(entity: ExportEntity, params: URLSearchParams) {
   return getOutboundSendsExport(params);
 }
 
+function getAccountsExport(params: URLSearchParams) {
+  const q = params.get("q");
+  const stage = params.get("stage");
+  const accountId = params.get("accountId");
+
+  return getAccounts({
+    q: q ?? undefined,
+    stage: stage ?? undefined
+  }).filter((account) => !accountId || account.id === accountId).map((account) => ({
+    id: account.id,
+    name: account.name,
+    domain: account.domain,
+    websiteUrl: account.websiteUrl,
+    notes: account.notes,
+    contactCount: account.contactCount,
+    targetCount: account.targetCount,
+    openTargetCount: account.openTargetCount,
+    wonTargetCount: account.wonTargetCount,
+    lastActivityAt: account.lastActivityAt,
+    createdAt: account.createdAt,
+    updatedAt: account.updatedAt
+  }));
+}
+
 function getTargetsExport(params: URLSearchParams) {
   const filters: TargetFilters = {
+    accountId: params.get("accountId") ?? undefined,
     q: params.get("q") ?? undefined,
     status: params.get("status") ?? undefined,
+    stage: params.get("stage") ?? undefined,
     source: params.get("source") ?? undefined,
     domain: params.get("domain") ?? undefined,
     flag: params.get("flag") ?? undefined
@@ -61,6 +94,8 @@ function getTargetsExport(params: URLSearchParams) {
   return getTargets(filters).map((target) => ({
     id: target.id,
     companyName: target.companyName,
+    accountId: target.accountId,
+    accountName: target.accountName,
     contactName: target.contactName,
     contactEmail: target.contactEmail,
     domain: target.domain,
@@ -69,6 +104,7 @@ function getTargetsExport(params: URLSearchParams) {
     sourceUrl: target.sourceUrl,
     dedupeKey: target.dedupeKey,
     status: target.status,
+    stage: target.stage,
     doNotResend: target.doNotResend ? 1 : 0,
     activityAt: target.activityAt,
     updatedAt: target.updatedAt
@@ -77,6 +113,7 @@ function getTargetsExport(params: URLSearchParams) {
 
 function getMessagesExport(params: URLSearchParams) {
   const targetId = params.get("targetId");
+  const contactId = params.get("contactId");
   const direction = params.get("direction");
   const clauses = [];
   const values: string[] = [];
@@ -89,6 +126,11 @@ function getMessagesExport(params: URLSearchParams) {
   if (direction) {
     clauses.push("messages.direction = ?");
     values.push(direction);
+  }
+
+  if (contactId) {
+    clauses.push("targets.contact_id = ?");
+    values.push(contactId);
   }
 
   return getSqlite()
@@ -123,29 +165,32 @@ function getMessagesExport(params: URLSearchParams) {
 }
 
 function getContactsExport(params: URLSearchParams) {
-  const domain = params.get("domain");
-
-  return getSqlite()
-    .prepare(
-      `
-      SELECT
-        contacts.id,
-        contacts.name,
-        contacts.email,
-        contacts.domain,
-        contacts.email_verification_provider as emailVerificationProvider,
-        contacts.email_verification_status as emailVerificationStatus,
-        contacts.email_verification_checked_at as emailVerificationCheckedAt,
-        contacts.email_verification_error as emailVerificationError,
-        (SELECT COUNT(*) FROM targets WHERE targets.contact_id = contacts.id) as targetCount,
-        contacts.created_at as createdAt,
-        contacts.updated_at as updatedAt
-      FROM contacts
-      ${domain ? "WHERE lower(contacts.domain) = lower(?)" : ""}
-      ORDER BY contacts.name ASC, contacts.email ASC
-    `
-    )
-    .all(...(domain ? [domain] : [])) as Record<string, unknown>[];
+  return getContacts({
+    q: params.get("q") ?? undefined,
+    domain: params.get("domain") ?? undefined,
+    accountId: params.get("accountId") ?? undefined,
+    contactId: params.get("contactId") ?? undefined,
+    tag: params.get("tag") ?? undefined
+  }).map((contact) => ({
+    id: contact.id,
+    accountId: contact.accountId,
+    accountName: contact.accountName,
+    name: contact.name,
+    email: contact.email,
+    domain: contact.domain,
+    title: contact.title,
+    phone: contact.phone,
+    links: contact.linksJson,
+    tags: contact.tags,
+    notes: contact.notes,
+    emailVerificationProvider: contact.emailVerificationProvider,
+    emailVerificationStatus: contact.emailVerificationStatus,
+    emailVerificationCheckedAt: contact.emailVerificationCheckedAt,
+    emailVerificationError: contact.emailVerificationError,
+    targetCount: contact.targetCount,
+    createdAt: contact.createdAt,
+    updatedAt: contact.updatedAt
+  }));
 }
 
 function getFollowupsExport(params: URLSearchParams) {

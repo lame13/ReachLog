@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import {
   BarChart3,
+  Building2,
+  CircleDollarSign,
   Database,
   FileText,
   Home,
@@ -14,12 +16,16 @@ import {
   Settings,
   Target,
   Upload,
+  Users,
   X
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: Home },
+  { href: "/pipeline", label: "Pipeline", icon: CircleDollarSign },
+  { href: "/accounts", label: "Accounts", icon: Building2 },
+  { href: "/contacts", label: "Contacts", icon: Users },
   { href: "/targets", label: "Targets", icon: Target },
   { href: "/followups", label: "Follow-ups", icon: Inbox },
   { href: "/templates", label: "Templates", icon: FileText },
@@ -140,7 +146,7 @@ export function AppShell({
       <div className="md:pl-64">
         {demoMode && (
           <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-900 md:px-6">
-            Demo: sample data. Emails stay here; nothing is sent.
+            Read-only demo: explore sample data. Changes and sending are disabled.
           </div>
         )}
 

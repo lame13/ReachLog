@@ -11,6 +11,8 @@ import { SendEmailModal } from "@/components/send-email-modal";
 import { StatusPill } from "@/components/status-pill";
 import { formatDateTime, timeAgo } from "@/modules/core/dates";
 import { getDashboardData, getSendTarget } from "@/modules/outreach/queries";
+import { getPipelineSummary } from "@/modules/pipeline/queries";
+import { pipelineStages } from "@/modules/pipeline/stages";
 import { markDeadAction, snoozeFollowupAction } from "@/modules/followups/actions";
 import { isTargetActionBlocked } from "@/modules/outreach/status";
 import { isEmailVerificationBlocking } from "@/modules/emailVerification/service";
@@ -34,6 +36,7 @@ type PageProps = {
 export default async function DashboardPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const data = getDashboardData();
+  const pipeline = getPipelineSummary();
   const sendTarget = getSendTarget(params?.sendTargetId);
   const sendFeedback = getSendFeedback(params);
 
@@ -95,6 +98,35 @@ export default async function DashboardPage({ searchParams }: PageProps) {
           value={data.stats.failedSends}
         />
       </div>
+
+      <section className="mt-6 rounded-lg border border-line bg-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
+          <div>
+            <h2 className="font-semibold">Pipeline</h2>
+            <p className="mt-1 text-xs text-muted">
+              {pipeline.open} open · {pipeline.won} won · {pipeline.lost} lost ·{" "}
+              {pipeline.accounts} account{pipeline.accounts === 1 ? "" : "s"}
+            </p>
+          </div>
+          <Link className="text-sm font-medium text-accent" href="/pipeline">
+            Open pipeline
+          </Link>
+        </div>
+        <div className="grid gap-2 px-4 py-3 sm:grid-cols-4 xl:grid-cols-7">
+          {pipelineStages.map((stage) => (
+            <Link
+              className="rounded-md border border-line px-3 py-2 transition hover:bg-panel"
+              href={`/pipeline?stage=${stage.key}`}
+              key={stage.key}
+            >
+              <div className="text-xs text-muted">{stage.label}</div>
+              <div className="mt-1 text-xl font-semibold">
+                {pipeline.byStage[stage.key]}
+              </div>
+            </Link>
+          ))}
+        </div>
+      </section>
 
       {sendFeedback && !sendTarget && (
         <p

@@ -9,6 +9,8 @@ import {
   getAnalyticsData,
   getAnalyticsRangeKey
 } from "@/modules/outreach/queries";
+import { getPipelineSummary } from "@/modules/pipeline/queries";
+import { pipelineStages } from "@/modules/pipeline/stages";
 
 type PageProps = {
   searchParams?: Promise<{
@@ -31,6 +33,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
   const rangeKey = getAnalyticsRangeKey(params?.range);
   const selectedActivitySeries = getDailyActivitySeriesKeys(params?.activity);
   const data = getAnalyticsData(rangeKey);
+  const pipeline = getPipelineSummary();
   const replyRate = percentage(data.metrics.repliedTargets, data.metrics.touchedTargets);
   const outreachRate = percentage(data.metrics.touchedTargets, data.metrics.totalTargets);
 
@@ -156,7 +159,14 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
         </section>
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-3">
+      <div className="mt-6 grid gap-6 lg:grid-cols-2 xl:grid-cols-4">
+        <CountPanel
+          label="Pipeline"
+          rows={pipelineStages.map((stage) => ({
+            label: stage.label,
+            count: pipeline.byStage[stage.key]
+          }))}
+        />
         <CountPanel
           label="Events"
           rows={data.eventCounts.map((row) => ({

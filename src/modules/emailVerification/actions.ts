@@ -7,14 +7,19 @@ export async function recheckContactEmailAction(formData: FormData) {
   const contactId = String(formData.get("contactId") ?? "");
   const targetId = String(formData.get("targetId") ?? "");
 
-  if (!contactId || !targetId) {
+  if (!contactId) {
     return;
   }
 
-  await forceRecheckContactEmail({ contactId, targetId });
+  await forceRecheckContactEmail({ contactId, targetId: targetId || null });
 
   revalidatePath("/dashboard");
   revalidatePath("/targets");
-  revalidatePath(`/targets/${targetId}`);
+  revalidatePath("/contacts");
+  revalidatePath(`/contacts/${contactId}`);
   revalidatePath("/analytics");
+
+  if (targetId) {
+    revalidatePath(`/targets/${targetId}`);
+  }
 }

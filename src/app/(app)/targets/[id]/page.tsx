@@ -2,7 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Ban, FileText, Mail, RefreshCw, Send } from "lucide-react";
 import { SendEmailModal } from "@/components/send-email-modal";
+import { StageMoveForm } from "@/components/stage-move-form";
+import { StagePill } from "@/components/stage-pill";
 import { StatusPill } from "@/components/status-pill";
+import { TimelineList } from "@/components/timeline-list";
 import { formatDateTime } from "@/modules/core/dates";
 import { recheckContactEmailAction } from "@/modules/emailVerification/actions";
 import {
@@ -18,6 +21,8 @@ import {
   snoozeFollowupAction
 } from "@/modules/followups/actions";
 import { getSendFeedback } from "@/modules/smtp/feedback";
+import { pipelineStages } from "@/modules/pipeline/stages";
+import { getTimeline } from "@/modules/timeline/events";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -42,7 +47,8 @@ export default async function TargetDetailPage({
     notFound();
   }
 
-  const { target, threads, messages, followups, forms, timeline } = detail;
+  const { target, threads, messages, followups, forms } = detail;
+  const timeline = getTimeline({ targetIds: [target.id] });
   const tomorrow = getDateInputValue(1);
   const nextOpenFollowup = followups
     .filter((followup) => followup.status === "open")
@@ -60,11 +66,36 @@ export default async function TargetDetailPage({
               <span>source: {target.sourceType}</span>
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
+              <StagePill stage={target.stage} />
               <StatusPill status={target.status} />
               {target.doNotResend && <StatusPill status="do not resend" />}
             </div>
+            {target.accountId && target.accountName && (
+              <div className="mt-3 text-sm">
+                <Link
+                  className="text-accent hover:underline"
+                  href={`/accounts/${target.accountId}`}
+                >
+                  {target.accountName}
+                </Link>
+                {target.contactId && (
+                  <>
+                    <span className="text-muted"> · </span>
+                    <Link
+                      className="text-accent hover:underline"
+                      href={`/contacts/${target.contactId}`}
+                    >
+                      contact record
+                    </Link>
+                  </>
+                )}
+              </div>
+            )}
           </div>
           <div className="flex flex-wrap gap-2">
+            <div className="w-56">
+              <StageMoveForm stage={target.stage} targetId={target.id} />
+            </div>
             <Link
               className="inline-flex h-10 items-center gap-2 rounded-md bg-ink px-3 text-sm font-medium text-white"
               href={`/targets/${target.id}?sendTargetId=${target.id}`}
@@ -215,6 +246,26 @@ export default async function TargetDetailPage({
                 <DetailField label="Source" name="sourceType" value={target.sourceType} />
                 <DetailField label="Status" name="status" value={target.status} />
               </div>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-muted">
+                  Pipeline stage
+                </span>
+                <select
+                  className="h-9 w-full rounded-md border border-line bg-white px-3 text-sm outline-none focus:border-accent"
+                  defaultValue={target.stage}
+                  name="stage"
+                >
+                  {pipelineStages.map((stage) => (
+                    <option key={stage.key} value={stage.key}>
+                      {stage.label}
+                    </option>
+                  ))}
+                </select>
+                <span className="mt-1 block text-xs text-muted">
+                  Changing the stage updates the status above unless you edit the status
+                  yourself in the same save.
+                </span>
+              </label>
               <DetailField
                 label="Reply type"
                 name="replyType"
@@ -287,27 +338,7 @@ export default async function TargetDetailPage({
             <div className="border-b border-line px-4 py-3">
               <h2 className="font-semibold">Timeline</h2>
             </div>
-            <div className="divide-y divide-line">
-              {timeline.length ? (
-                timeline.map((event) => {
-                  const detailText = getEventDetail(event.payloadJson);
-
-                  return (
-                    <div key={event.id} className="px-4 py-3 text-sm">
-                      <div className="font-medium">{event.eventType}</div>
-                      <div className="text-muted">{formatDateTime(event.createdAt)}</div>
-                      {detailText && (
-                        <div className="mt-2 whitespace-pre-wrap text-muted">
-                          {detailText}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="px-4 py-3 text-sm text-muted">No events yet.</div>
-              )}
-            </div>
+            <TimelineList items={timeline} emptyLabel="No events yet." />
           </section>
 
           <section className="rounded-lg border border-line bg-white shadow-sm">
@@ -474,49 +505,4 @@ function getTimeInputPart(value: string | null | undefined) {
   }
 
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-}
-
-function getEventDetail(payloadJson: string | null) {
-  if (!payloadJson) {
-    return null;
-  }
-
-  try {
-    const payload = JSON.parse(payloadJson) as Record<string, unknown>;
-    const note = typeof payload.note === "string" ? payload.note : null;
-    const reason = typeof payload.reason === "string" ? payload.reason : null;
-    const status = typeof payload.status === "string" ? `status: ${payload.status}` : null;
-    const replyType =
-      typeof payload.replyType === "string" && payload.replyType
-        ? `reply type: ${payload.replyType}`
-        : null;
-    const doNotResend =
-      typeof payload.doNotResend === "boolean"
-        ? `do not resend: ${payload.doNotResend ? "on" : "off"}`
-        : null;
-    const messageId =
-      typeof payload.messageId === "string" ? `message: ${payload.messageId}` : null;
-    const dueAt =
-      typeof payload.dueAt === "string"
-        ? `next follow-up: ${formatDateTime(payload.dueAt)}`
-        : null;
-    const nextFollowupAt =
-      typeof payload.nextFollowupAt === "string" && payload.nextFollowupAt
-        ? `next follow-up: ${formatDateTime(payload.nextFollowupAt)}`
-        : null;
-    const lines = [
-      status,
-      replyType,
-      doNotResend,
-      messageId,
-      dueAt,
-      nextFollowupAt,
-      reason,
-      note
-    ].filter(Boolean);
-
-    return lines.length ? lines.join("\n") : null;
-  } catch {
-    return null;
-  }
 }

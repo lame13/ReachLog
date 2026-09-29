@@ -170,7 +170,9 @@ test("0.2.0 workflows", async (t) => {
           )
           .run();
         const migrations = old
-          .prepare("SELECT * FROM schema_migrations ORDER BY version")
+          .prepare(
+            "SELECT * FROM schema_migrations WHERE version < '0007' ORDER BY version",
+          )
           .all();
         bootstrapDatabase(old);
         bootstrapDatabase(old);

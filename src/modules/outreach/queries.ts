@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { getDb, getSqlite } from "@/modules/core/db/client";
 import {
+  accounts,
   contactFormSubmissions,
   contacts,
   events,
@@ -17,8 +18,10 @@ import { getEmailDraft } from "@/modules/smtp/drafts";
 export type TargetListItem = Awaited<ReturnType<typeof getTargets>>[number];
 export type FollowupListItem = Awaited<ReturnType<typeof getFollowups>>[number];
 export type TargetFilters = {
+  accountId?: string;
   q?: string;
   status?: string;
+  stage?: string;
   source?: string;
   domain?: string;
   flag?: string;
@@ -42,6 +45,9 @@ export type TargetListRow = {
   sourceUrl: string | null;
   dedupeKey: string;
   status: string;
+  stage: string;
+  accountId: string | null;
+  accountName: string | null;
   doNotResend: number;
   updatedAt: string;
   activityAt: string;
@@ -198,6 +204,9 @@ export function getTargets(filters: TargetFilters = {}) {
         targets.source_url as sourceUrl,
         targets.dedupe_key as dedupeKey,
         targets.status,
+        targets.stage,
+        targets.account_id as accountId,
+        accounts.name as accountName,
         targets.do_not_resend as doNotResend,
         targets.updated_at as updatedAt,
         MAX(
@@ -220,6 +229,7 @@ export function getTargets(filters: TargetFilters = {}) {
         contacts.domain
       FROM targets
       LEFT JOIN contacts ON contacts.id = targets.contact_id
+      LEFT JOIN accounts ON accounts.id = targets.account_id
       ORDER BY activityAt DESC, targets.updated_at DESC, targets.company_name ASC
     `
     )
@@ -228,8 +238,13 @@ export function getTargets(filters: TargetFilters = {}) {
   const relatedMatches = filters.q ? findRelatedMatches(filters.q) : null;
 
   return rows.filter((target) => {
+    if (filters.accountId && target.accountId !== filters.accountId) {
+      return false;
+    }
+
     const q = filters.q?.trim().toLowerCase();
     const status = filters.status?.trim();
+    const stage = filters.stage?.trim();
     const source = filters.source?.trim();
     const domain = filters.domain?.trim().toLowerCase();
     const flag = filters.flag?.trim();
@@ -243,7 +258,9 @@ export function getTargets(filters: TargetFilters = {}) {
         target.websiteUrl,
         target.sourceUrl,
         target.dedupeKey,
-        target.status
+        target.status,
+        target.stage,
+        target.accountName
       ]
         .filter(Boolean)
         .join(" ")
@@ -255,6 +272,10 @@ export function getTargets(filters: TargetFilters = {}) {
     }
 
     if (status && target.status !== status) {
+      return false;
+    }
+
+    if (stage && target.stage !== stage) {
       return false;
     }
 
@@ -325,6 +346,7 @@ export function getTargetFilterOptions() {
 
   return {
     statuses: unique(targets.map((target) => target.status)),
+    stages: unique(targets.map((target) => target.stage)),
     sources: unique(targets.map((target) => target.sourceType)),
     domains: unique(targets.map((target) => target.domain))
   };
@@ -337,12 +359,15 @@ export function getTargetDetail(id: string) {
     .select({
       id: targets.id,
       contactId: targets.contactId,
+      accountId: targets.accountId,
+      accountName: accounts.name,
       companyName: targets.companyName,
       websiteUrl: targets.websiteUrl,
       sourceType: targets.sourceType,
       sourceUrl: targets.sourceUrl,
       dedupeKey: targets.dedupeKey,
       status: targets.status,
+      stage: targets.stage,
       doNotResend: targets.doNotResend,
       createdAt: targets.createdAt,
       updatedAt: targets.updatedAt,
@@ -356,6 +381,7 @@ export function getTargetDetail(id: string) {
     })
     .from(targets)
     .leftJoin(contacts, eq(targets.contactId, contacts.id))
+    .leftJoin(accounts, eq(targets.accountId, accounts.id))
     .where(eq(targets.id, id))
     .get();
 

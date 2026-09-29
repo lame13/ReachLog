@@ -2,7 +2,34 @@ import { NextRequest, NextResponse } from "next/server";
 
 const REALM = "ReachLog";
 
+// Block writes to the shared demo database, including POST-based server actions.
+const READ_ONLY_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+export function demoReadOnly(request: NextRequest): NextResponse | null {
+  if (process.env.DEMO_MODE !== "true") {
+    return null;
+  }
+  if (READ_ONLY_METHODS.has(request.method.toUpperCase())) {
+    return null;
+  }
+  return new NextResponse(
+    "This is a read-only demo of ReachLog. Nothing can be added, changed, imported or sent here.",
+    {
+      status: 403,
+      headers: {
+        "content-type": "text/plain; charset=utf-8",
+        "cache-control": "no-store"
+      }
+    }
+  );
+}
+
 export function proxy(request: NextRequest) {
+  const refused = demoReadOnly(request);
+  if (refused) {
+    return refused;
+  }
+
   if (process.env.APP_BASIC_AUTH_ENABLED !== "true") {
     return NextResponse.next();
   }

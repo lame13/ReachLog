@@ -106,8 +106,12 @@ async function main() {
   if (authEnabled && (!process.env.APP_BASIC_AUTH_USER || !password || password === "CHANGE_ME_LONG_RANDOM_PASSWORD")) {
     throw new Error("Set APP_BASIC_AUTH_USER and a real APP_BASIC_AUTH_PASSWORD before starting with authentication.");
   }
-  if (command !== "worker" && (!isLocal(host) || !isLocal(publicHostname)) && !authEnabled) {
-    throw new Error("Network access requires APP_BASIC_AUTH_ENABLED=true and credentials. Use the default localhost address for private local use.");
+  // Public demo access is opt-in; the request proxy blocks writes in demo mode.
+  const publicDemo = demo && process.env.REACHLOG_DEMO_PUBLIC === "true";
+  if (command !== "worker" && (!isLocal(host) || !isLocal(publicHostname)) && !authEnabled && !publicDemo) {
+    throw new Error(
+      "Network access requires APP_BASIC_AUTH_ENABLED=true and credentials. Use the default localhost address for private local use, or REACHLOG_DEMO_PUBLIC=true to publish a read-only demo."
+    );
   }
 
   const appDir = path.join(__dirname, "app");
@@ -146,6 +150,9 @@ async function main() {
     ? [path.join(__dirname, "workers", `${worker === "mail-resync" ? "mail-sync" : worker}.cjs`)]
     : [require.resolve("next/dist/bin/next"), "start", appDir, "--hostname", host, "--port", String(port)];
   console.log(`ReachLog${demo ? " demo" : ""} ${packageVersion()} · data: ${database}`);
+  if (publicDemo) {
+    console.log("Public read-only demo: every request that could add, change, import or send anything is refused.");
+  }
   if (command !== "worker") console.log(
     [
       "",

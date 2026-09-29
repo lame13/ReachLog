@@ -42,7 +42,7 @@ async function get(route, options = {}) {
   assert.equal(response.status, 200, `${route}: ${response.status}; ${log}`);
   return response;
 }
-async function submit(route, form, values, buttonText) {
+async function submit(route, form, values, buttonText, expectedStatus = 303) {
   assert.ok(form, 'Expected rendered form');
   const data = new FormData();
   for (const tag of form.matchAll(/<input\b[^>]*>/g)) {
@@ -60,7 +60,7 @@ async function submit(route, form, values, buttonText) {
   }
   for (const [key, value] of Object.entries(values)) data.set(key, value);
   const response = await fetch(base + route, { method: 'POST', body: data, redirect: 'manual', headers: { origin: base } });
-  assert.equal(response.status, 303, `Form returned ${response.status}: ${await response.text()}; ${log}`);
+  assert.equal(response.status, expectedStatus, `Form returned ${response.status}: ${await response.text()}; ${log}`);
   return response.headers.get('location');
 }
 
@@ -72,7 +72,7 @@ try {
   assert.ok(assets.some((asset) => asset.endsWith('.css')));
   assert.ok(assets.some((asset) => asset.endsWith('.js')));
   for (const asset of assets) await get(asset);
-  for (const route of ['/targets', '/followups', '/analytics', '/import', '/settings/modules']) await get(route);
+  for (const route of ['/pipeline', '/accounts', '/contacts', '/targets', '/followups', '/analytics', '/import', '/settings/modules']) await get(route);
   console.log(`PASS: empty startup, app routes and ${assets.length} static assets`);
 
   const create = await (await get('/targets?showCreate=1')).text();
@@ -106,14 +106,18 @@ try {
 
   await start('demo');
   const demoTargets = await (await get('/api/export/targets?format=json')).json();
-  assert.equal(demoTargets.count, 4);
+  assert.equal(demoTargets.count, 6);
   const demoUrl = '/targets?sendTargetId=target-acme';
   const demoCompose = await (await get(demoUrl)).text();
-  assert.match(demoCompose, /nothing is sent/);
-  const sent = await submit(demoUrl, forms(demoCompose).find((form) => form.includes('name="targetId"')), { targetId: 'target-acme', subject: 'Local simulation', body: 'Demo test only', fromEmail: 'me@example.local', returnTo: '/targets', followupDays: '5' });
-  assert.match(decodeURIComponent(sent), /simulated/);
+  assert.match(demoCompose, /Read-only demo/);
+  const beforeMessages = await (await get('/api/export/messages?format=json')).json();
+  await submit(demoUrl, forms(demoCompose).find((form) => form.includes('name="targetId"')), { targetId: 'target-acme', subject: 'Blocked demo send', body: 'Demo test only', fromEmail: 'me@example.local', returnTo: '/targets', followupDays: '5' }, undefined, 403);
+  const demoPipeline = await (await get('/pipeline')).text();
+  await submit('/pipeline', forms(demoPipeline).find((form) => form.includes('name="stage"')), { targetId: 'target-acme', stage: 'lost' }, undefined, 403);
+  assert.deepEqual((await (await get('/api/export/messages?format=json')).json()).rows, beforeMessages.rows);
+  assert.deepEqual((await (await get('/api/export/targets?format=json')).json()).rows, demoTargets.rows);
   await stop();
-  console.log('PASS: separate demo data and simulated send');
+  console.log('PASS: separate demo data; sends and stage changes are blocked');
 
   const password = 'test-only-' + Date.now();
   await start('start', { APP_BASIC_AUTH_ENABLED: 'true', APP_BASIC_AUTH_USER: 'test-owner', APP_BASIC_AUTH_PASSWORD: password });

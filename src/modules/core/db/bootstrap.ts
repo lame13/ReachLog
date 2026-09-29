@@ -1,5 +1,7 @@
 import type BetterSqlite3 from "better-sqlite3";
 import { env } from "@/modules/core/env";
+import { backfillAccountsFromTargets } from "@/modules/accounts/store";
+import { stageFromLegacyStatus } from "@/modules/pipeline/stages";
 
 type SqliteDatabase = BetterSqlite3.Database;
 
@@ -12,9 +14,15 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 
 CREATE TABLE IF NOT EXISTS contacts (
   id TEXT PRIMARY KEY,
+  account_id TEXT REFERENCES accounts(id),
   name TEXT NOT NULL,
   email TEXT NOT NULL,
   domain TEXT NOT NULL,
+  title TEXT,
+  phone TEXT,
+  links_json TEXT,
+  tags TEXT,
+  notes TEXT,
   email_verification_provider TEXT,
   email_verification_status TEXT,
   email_verification_checked_at TEXT,
@@ -26,15 +34,30 @@ CREATE TABLE IF NOT EXISTS contacts (
 CREATE UNIQUE INDEX IF NOT EXISTS contacts_email_unique ON contacts(email);
 CREATE INDEX IF NOT EXISTS contacts_domain_idx ON contacts(domain);
 
+CREATE TABLE IF NOT EXISTS accounts (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  domain TEXT,
+  website_url TEXT,
+  dedupe_key TEXT NOT NULL,
+  notes TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS accounts_dedupe_key_unique ON accounts(dedupe_key);
+CREATE INDEX IF NOT EXISTS accounts_domain_idx ON accounts(domain);
+
 CREATE TABLE IF NOT EXISTS targets (
   id TEXT PRIMARY KEY,
   contact_id TEXT REFERENCES contacts(id),
+  account_id TEXT REFERENCES accounts(id),
   company_name TEXT NOT NULL,
   website_url TEXT,
   source_type TEXT NOT NULL,
   source_url TEXT,
   dedupe_key TEXT NOT NULL,
   status TEXT NOT NULL,
+  stage TEXT NOT NULL DEFAULT 'new',
   do_not_resend INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
@@ -200,6 +223,7 @@ export function bootstrapDatabase(sqlite: SqliteDatabase) {
   ensureOutboundSendIdempotency(sqlite);
   ensureEmailVerificationColumns(sqlite);
   ensureMessageReadColumns(sqlite);
+  const upgradeToAccounts = ensureAccountsAndPipelineColumns(sqlite);
   recordSchemaVersion(sqlite, "0001", "bootstrap_schema");
   recordSchemaVersion(sqlite, "0002", "prod_safety_tables");
   recordSchemaVersion(sqlite, "0003", "outbound_send_idempotency");
@@ -233,6 +257,8 @@ export function bootstrapDatabase(sqlite: SqliteDatabase) {
     for (const [name, minutes] of [["mail-sync", 5], ["followup-check", 15], ["backup", 1440]] as const) insert.run(name, minutes, new Date().toISOString());
     recordSchemaVersion(sqlite, "0007", "connections_scheduling_templates");
   })();
+
+  applyAccountsAndPipelineMigration(sqlite, upgradeToAccounts);
 
   const seeded = sqlite
     .prepare("SELECT COUNT(*) as count FROM contacts")
@@ -271,6 +297,83 @@ function ensureMessageReadColumns(sqlite: SqliteDatabase) {
   if (!tableHasColumn(sqlite, "messages", "read_at")) {
     sqlite.exec("ALTER TABLE messages ADD COLUMN read_at TEXT");
   }
+}
+
+function ensureAccountsAndPipelineColumns(sqlite: SqliteDatabase) {
+  const columns = [
+    ["targets", "account_id", "TEXT REFERENCES accounts(id)"],
+    ["targets", "stage", "TEXT NOT NULL DEFAULT 'new'"],
+    ["contacts", "account_id", "TEXT REFERENCES accounts(id)"],
+    ["contacts", "title", "TEXT"],
+    ["contacts", "phone", "TEXT"],
+    ["contacts", "links_json", "TEXT"],
+    ["contacts", "tags", "TEXT"],
+    ["contacts", "notes", "TEXT"]
+  ] as const;
+
+  let added = false;
+
+  for (const [table, column, definition] of columns) {
+    if (!tableHasColumn(sqlite, table, column)) {
+      sqlite.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+      added = true;
+    }
+  }
+
+  sqlite.exec(`
+    CREATE INDEX IF NOT EXISTS contacts_account_idx ON contacts(account_id);
+    CREATE INDEX IF NOT EXISTS targets_account_idx ON targets(account_id);
+    CREATE INDEX IF NOT EXISTS targets_stage_idx ON targets(stage);
+  `);
+
+  return added || !migrationApplied(sqlite, "0008");
+}
+
+/**
+ * 0008 turns companies into accounts and gives every target a pipeline stage.
+ * An existing installation keeps every record: companies are derived from the
+ * targets it already has, and the free-text status is translated through
+ * `stageFromLegacyStatus`. The second half only runs for databases that have
+ * not seen this migration yet, so a stage set by hand is never overwritten.
+ */
+function applyAccountsAndPipelineMigration(
+  sqlite: SqliteDatabase,
+  shouldBackfill: boolean
+) {
+  sqlite.transaction(() => {
+    if (shouldBackfill) {
+      backfillAccountsFromTargets(sqlite);
+
+      const legacyTargets = sqlite
+        .prepare(
+          `
+          SELECT id, status
+          FROM targets
+          WHERE stage IS NULL OR trim(stage) = '' OR stage = 'new'
+        `
+        )
+        .all() as Array<{ id: string; status: string | null }>;
+      const setStage = sqlite.prepare("UPDATE targets SET stage = ? WHERE id = ?");
+
+      for (const target of legacyTargets) {
+        const stage = stageFromLegacyStatus(target.status);
+
+        if (stage !== "new") {
+          setStage.run(stage, target.id);
+        }
+      }
+    }
+
+    recordSchemaVersion(sqlite, "0008", "accounts_contacts_pipeline");
+  })();
+}
+
+function migrationApplied(sqlite: SqliteDatabase, version: string) {
+  return Boolean(
+    sqlite
+      .prepare("SELECT 1 AS applied FROM schema_migrations WHERE version = ?")
+      .get(version)
+  );
 }
 
 function ensureOutboundSendIdempotency(sqlite: SqliteDatabase) {
@@ -317,17 +420,21 @@ function seedDatabase(sqlite: SqliteDatabase) {
   };
 
   const insertContact = sqlite.prepare(`
-    INSERT INTO contacts (id, name, email, domain, created_at, updated_at)
-    VALUES (@id, @name, @email, @domain, @createdAt, @updatedAt)
+    INSERT INTO contacts (id, account_id, name, email, domain, title, tags, created_at, updated_at)
+    VALUES (@id, @accountId, @name, @email, @domain, @title, @tags, @createdAt, @updatedAt)
+  `);
+  const insertAccount = sqlite.prepare(`
+    INSERT INTO accounts (id, name, domain, website_url, dedupe_key, notes, created_at, updated_at)
+    VALUES (@id, @name, @domain, @websiteUrl, @dedupeKey, @notes, @createdAt, @updatedAt)
   `);
   const insertTarget = sqlite.prepare(`
     INSERT INTO targets (
-      id, contact_id, company_name, website_url, source_type, source_url,
-      dedupe_key, status, do_not_resend, created_at, updated_at
+      id, contact_id, account_id, company_name, website_url, source_type,
+      source_url, dedupe_key, status, stage, do_not_resend, created_at, updated_at
     )
     VALUES (
-      @id, @contactId, @companyName, @websiteUrl, @sourceType, @sourceUrl,
-      @dedupeKey, @status, @doNotResend, @createdAt, @updatedAt
+      @id, @contactId, @accountId, @companyName, @websiteUrl, @sourceType,
+      @sourceUrl, @dedupeKey, @status, @stage, @doNotResend, @createdAt, @updatedAt
     )
   `);
   const insertThread = sqlite.prepare(`
@@ -386,22 +493,106 @@ function seedDatabase(sqlite: SqliteDatabase) {
   const transaction = sqlite.transaction(() => {
     [
       {
+        id: "account-acme",
+        name: "Acme Hosting",
+        domain: "acme.example",
+        websiteUrl: "https://acme.example",
+        dedupeKey: "domain:acme.example",
+        notes: "Met through a Hacker News thread. Good fit for a migration."
+      },
+      {
+        id: "account-blue",
+        name: "Blue Apps",
+        domain: "blue.example",
+        websiteUrl: "https://blue.example",
+        dedupeKey: "domain:blue.example",
+        notes: null
+      },
+      {
+        id: "account-wptools",
+        name: "WP Tools Ltd",
+        domain: "wptools.example",
+        websiteUrl: "https://wptools.example",
+        dedupeKey: "domain:wptools.example",
+        notes: null
+      },
+      {
+        id: "account-devdesk",
+        name: "DevDesk",
+        domain: "devdesk.example",
+        websiteUrl: "https://devdesk.example",
+        dedupeKey: "domain:devdesk.example",
+        notes: "Only a website form, no public email."
+      },
+      {
+        id: "account-northwind",
+        name: "Northwind Labs",
+        domain: "northwind.example",
+        websiteUrl: "https://northwind.example",
+        dedupeKey: "domain:northwind.example",
+        notes: "Referral from Acme. Wants a scoped quote."
+      },
+      {
+        id: "account-kite",
+        name: "Kite & Co",
+        domain: "kite.example",
+        websiteUrl: "https://kite.example",
+        dedupeKey: "domain:kite.example",
+        notes: "Signed after two calls."
+      }
+    ].forEach((account) =>
+      insertAccount.run({
+        ...account,
+        createdAt: iso(-14),
+        updatedAt: iso(-1)
+      })
+    );
+
+    [
+      {
         id: "contact-acme",
+        accountId: "account-acme",
         name: "Alex",
         email: "alex@acme.example",
-        domain: "acme.example"
+        domain: "acme.example",
+        title: "Operations lead",
+        tags: "warm,referral"
       },
       {
         id: "contact-blue",
+        accountId: "account-blue",
         name: "Blue Apps",
         email: "hello@blue.example",
-        domain: "blue.example"
+        domain: "blue.example",
+        title: null,
+        tags: "inbound-form"
       },
       {
         id: "contact-wptools",
+        accountId: "account-wptools",
         name: "WP Tools Ops",
         email: "ops@wptools.example",
-        domain: "wptools.example"
+        domain: "wptools.example",
+        title: null,
+        tags: "plugin-support"
+      },
+      {
+        id: "contact-northwind",
+        accountId: "account-northwind",
+        name: "Priya",
+        email: "priya@northwind.example",
+        domain: "northwind.example",
+        title: "CTO",
+        tags: "referral,technical"
+      },
+      {
+        id: "contact-kite",
+        accountId: "account-kite",
+        name: "Sam",
+        email: "sam@kite.example",
+        domain: "kite.example",
+        title: "Founder",
+        tags: "client"
       }
     ].forEach((contact) =>
       insertContact.run({
@@ -415,45 +606,79 @@ function seedDatabase(sqlite: SqliteDatabase) {
       {
         id: "target-acme",
         contactId: "contact-acme",
+        accountId: "account-acme",
         companyName: "Acme Hosting",
         websiteUrl: "https://acme.example",
         sourceType: "hn",
         sourceUrl: "https://news.ycombinator.com/item?id=401",
         dedupeKey: "email:alex@acme.example",
         status: "replied",
+        stage: "replied",
         doNotResend: 0
       },
       {
         id: "target-blue",
         contactId: "contact-blue",
+        accountId: "account-blue",
         companyName: "Blue Apps",
         websiteUrl: "https://blue.example",
         sourceType: "contact_form",
         sourceUrl: "https://blue.example/contact",
         dedupeKey: "domain:blue.example",
         status: "sent",
+        stage: "contacted",
         doNotResend: 0
       },
       {
         id: "target-wptools",
         contactId: "contact-wptools",
+        accountId: "account-wptools",
         companyName: "WP Tools Ltd",
         websiteUrl: "https://wptools.example",
         sourceType: "wporg",
         sourceUrl: "https://wordpress.org/support/topic/example",
         dedupeKey: "wporg:https://wordpress.org/support/topic/example",
         status: "follow-up due",
+        stage: "contacted",
         doNotResend: 0
       },
       {
         id: "target-devdesk",
         contactId: null,
+        accountId: "account-devdesk",
         companyName: "DevDesk",
         websiteUrl: "https://devdesk.example",
         sourceType: "contact_form",
         sourceUrl: "https://devdesk.example/contact",
         dedupeKey: "form:devdesk.example/contact",
         status: "follow-up due",
+        stage: "new",
+        doNotResend: 0
+      },
+      {
+        id: "target-northwind",
+        contactId: "contact-northwind",
+        accountId: "account-northwind",
+        companyName: "Northwind Labs",
+        websiteUrl: "https://northwind.example",
+        sourceType: "referral",
+        sourceUrl: null,
+        dedupeKey: "email:priya@northwind.example",
+        status: "replied",
+        stage: "qualified",
+        doNotResend: 0
+      },
+      {
+        id: "target-kite",
+        contactId: "contact-kite",
+        accountId: "account-kite",
+        companyName: "Kite & Co",
+        websiteUrl: "https://kite.example",
+        sourceType: "referral",
+        sourceUrl: null,
+        dedupeKey: "email:sam@kite.example",
+        status: "replied",
+        stage: "won",
         doNotResend: 0
       }
     ].forEach((target) =>
@@ -668,7 +893,15 @@ function seedDatabase(sqlite: SqliteDatabase) {
       ["target-wptools", "email_sent", iso(-6, 11)],
       ["target-devdesk", "target_created", iso(-4, 15)],
       ["target-devdesk", "form_submitted", iso(-4, 15)],
-      ["target-devdesk", "followup_due", iso(-2, 9)]
+      ["target-devdesk", "followup_due", iso(-2, 9)],
+      ["target-northwind", "target_created", iso(-7)],
+      ["target-northwind", "email_sent", iso(-5, 9)],
+      ["target-northwind", "reply_received", iso(-3, 16)],
+      ["target-northwind", "stage_changed", iso(-2, 10)],
+      ["target-kite", "target_created", iso(-12)],
+      ["target-kite", "email_sent", iso(-11, 9)],
+      ["target-kite", "reply_received", iso(-9, 14)],
+      ["target-kite", "stage_changed", iso(-4, 11)]
     ].forEach(([entityId, eventType, createdAt], index) =>
       insertEvent.run({
         id: `event-${index + 1}`,

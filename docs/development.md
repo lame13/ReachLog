@@ -23,7 +23,7 @@ in the native SQLite dependency before the test runner reports a useful error.
 
 The development launcher loads Next's environment files before starting either process, so `.env.local` and `.env.development` settings apply to both the app and scheduler. `DOTENV_CONFIG_PATH` can select an external configuration file.
 
-The regression suite uses disposable databases and local SMTP/IMAP fixtures, so it needs permission to listen on localhost. No real provider accounts or messages are used. It covers migration from the pre-0007 schema, credential persistence and redaction, connection checks, templates, worker leases, scheduler overlap, sleep recovery, failure reporting, and shutdown.
+The regression suite uses disposable databases and local SMTP/IMAP fixtures, so it needs permission to listen on localhost. No real provider accounts or messages are used. It covers migration from the pre-0007 and pre-0008 schema, accounts and contacts, pipeline stages and the board, credential persistence and redaction, connection checks, templates, worker leases, scheduler overlap, sleep recovery, failure reporting, and shutdown.
 
 Production builds refuse local `.env` files in the source checkout. Keep runtime configuration in the external data directory. Build-time public variables and mail credentials are removed from the child build environment.
 
@@ -63,15 +63,15 @@ The browser script owns its test database, local SMTP fixture, application proce
 
 Update `package.json`, both root version fields in `npm-shrinkwrap.json`, `CHANGELOG.md`, and `RELEASE_NOTES.md`. Run the checks and install and exercise the resulting archive outside the checkout. Review and commit the release files, including any README images.
 
-For 0.3.0, after committing on `master`:
+For 0.4.0, after committing on `master`:
 
 ```sh
 nvm use
-git tag -a 0.3.0 -m "ReachLog 0.3.0"
+git tag -a 0.4.0 -m "ReachLog 0.4.0"
 git push origin master
-git push origin 0.3.0
+git push origin 0.4.0
 npm publish --access public
-gh release create 0.3.0 --verify-tag --title "ReachLog 0.3.0" --notes-file RELEASE_NOTES.md
+gh release create 0.4.0 --verify-tag --title "ReachLog 0.4.0" --notes-file RELEASE_NOTES.md
 ```
 
 Sign in with `npm login` and `gh auth login` if needed. Tags use the version

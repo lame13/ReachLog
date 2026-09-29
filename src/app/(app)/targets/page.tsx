@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AlertTriangle, Plus, Search, Send } from "lucide-react";
 import { ExportLinks } from "@/components/export-links";
 import { SendEmailModal } from "@/components/send-email-modal";
+import { StagePill } from "@/components/stage-pill";
 import { StatusPill } from "@/components/status-pill";
 import { formatDateTime } from "@/modules/core/dates";
 import { createTargetAction } from "@/modules/outreach/actions";
@@ -12,12 +13,14 @@ import {
 } from "@/modules/outreach/queries";
 import { isEmailVerificationBlocking } from "@/modules/emailVerification/service";
 import { isTargetActionBlocked } from "@/modules/outreach/status";
+import { pipelineStages } from "@/modules/pipeline/stages";
 import { getSendFeedback } from "@/modules/smtp/feedback";
 
 type PageProps = {
   searchParams?: Promise<{
     q?: string;
     status?: string;
+    stage?: string;
     source?: string;
     domain?: string;
     flag?: string;
@@ -36,6 +39,7 @@ export default async function TargetsPage({ searchParams }: PageProps) {
   const allTargets = getTargets({
     q: params?.q,
     status: params?.status,
+    stage: params?.stage,
     source: params?.source,
     domain: params?.domain,
     flag: params?.flag
@@ -53,6 +57,7 @@ export default async function TargetsPage({ searchParams }: PageProps) {
   const exportParams = {
     q: params?.q,
     status: params?.status,
+    stage: params?.stage,
     source: params?.source,
     domain: params?.domain,
     flag: params?.flag
@@ -88,7 +93,7 @@ export default async function TargetsPage({ searchParams }: PageProps) {
 
       {showCreate && <CreateTargetPanel />}
 
-      <form className="mb-4 grid gap-3 rounded-lg border border-line bg-white p-4 shadow-sm lg:grid-cols-[1fr_180px_180px_180px_160px_auto]">
+      <form className="mb-4 grid gap-3 rounded-lg border border-line bg-white p-4 shadow-sm sm:grid-cols-2 xl:grid-cols-4">
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-muted">Search</span>
           <div className="relative">
@@ -105,6 +110,15 @@ export default async function TargetsPage({ searchParams }: PageProps) {
             />
           </div>
         </label>
+        <FilterSelect
+          label="Stage"
+          labels={Object.fromEntries(
+            pipelineStages.map((stage) => [stage.key, stage.label])
+          )}
+          name="stage"
+          options={pipelineStages.map((stage) => stage.key)}
+          value={params?.stage}
+        />
         <FilterSelect
           label="Status"
           name="status"
@@ -174,6 +188,7 @@ export default async function TargetsPage({ searchParams }: PageProps) {
                 <th className="px-4 py-3 font-medium">Contact</th>
                 <th className="px-4 py-3 font-medium">Domain</th>
                 <th className="px-4 py-3 font-medium">Source</th>
+                <th className="px-4 py-3 font-medium">Stage</th>
                 <th className="px-4 py-3 font-medium">Status</th>
                 <th className="px-4 py-3 font-medium">Action</th>
               </tr>
@@ -207,6 +222,14 @@ export default async function TargetsPage({ searchParams }: PageProps) {
                       <div className="mt-1 text-xs text-muted">
                         Activity {formatDateTime(target.activityAt)}
                       </div>
+                      {target.accountId && target.accountName && (
+                        <Link
+                          className="mt-1 block text-xs text-accent hover:underline"
+                          href={`/accounts/${target.accountId}`}
+                        >
+                          {target.accountName}
+                        </Link>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-muted">
                       {target.contactEmail ?? "form only"}
@@ -234,6 +257,9 @@ export default async function TargetsPage({ searchParams }: PageProps) {
                       )}
                     </td>
                     <td className="px-4 py-3">
+                      <StagePill stage={target.stage} />
+                    </td>
+                    <td className="px-4 py-3">
                       <StatusPill status={target.status} />
                     </td>
                     <td className="px-4 py-3">
@@ -257,7 +283,7 @@ export default async function TargetsPage({ searchParams }: PageProps) {
                 })
               ) : (
                 <tr className="border-t border-line">
-                  <td className="px-4 py-10 text-center text-muted" colSpan={6}>
+                  <td className="px-4 py-10 text-center text-muted" colSpan={7}>
                     No targets match these filters.
                   </td>
                 </tr>
@@ -393,6 +419,20 @@ function CreateTargetPanel() {
         <TextField label="Source URL" name="sourceUrl" type="url" />
         <TextField label="Dedupe key" name="dedupeKey" placeholder="auto if blank" />
         <label className="block">
+          <span className="mb-1 block text-xs font-medium text-muted">Stage</span>
+          <select
+            className="h-10 w-full rounded-md border border-line bg-white px-3 text-sm outline-none focus:border-accent"
+            defaultValue="new"
+            name="stage"
+          >
+            {pipelineStages.map((stage) => (
+              <option key={stage.key} value={stage.key}>
+                {stage.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block">
           <span className="mb-1 block text-xs font-medium text-muted">Status</span>
           <select
             className="h-10 w-full rounded-md border border-line bg-white px-3 text-sm outline-none focus:border-accent"
@@ -451,12 +491,14 @@ function FilterSelect({
   label,
   name,
   options,
-  value
+  value,
+  labels
 }: {
   label: string;
   name: string;
   options: string[];
   value?: string;
+  labels?: Record<string, string>;
 }) {
   return (
     <label className="block">
@@ -469,7 +511,7 @@ function FilterSelect({
         <option value="">Any</option>
         {options.map((option) => (
           <option key={option} value={option}>
-            {option}
+            {labels?.[option] ?? option}
           </option>
         ))}
       </select>
