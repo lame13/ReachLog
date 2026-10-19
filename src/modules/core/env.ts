@@ -69,6 +69,13 @@ const EnvSchema = z.object({
   EMAILLISTVERIFY_TIMEOUT_MS: portFromString(15000),
   EMAILLISTVERIFY_BATCH_SIZE: portFromString(25),
 
+  AI_ENABLED: booleanFromString,
+  AI_BASE_URL: z.string().default("https://api.openai.com/v1"),
+  AI_API_KEY: z.string().optional(),
+  AI_MODEL: z.string().default("gpt-4o-mini"),
+  AI_AUTO_SEND: booleanFromString,
+  AI_DAILY_SEND_LIMIT: portFromString(5),
+
   BACKUP_DIR: z.string().default(defaultBackupDir),
   B2_REMOTE: z.string().optional()
 });

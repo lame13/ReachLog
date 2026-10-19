@@ -1,0 +1,11 @@
+[Unit]
+Description=Run ReachLog AI automation every five minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=15s
+Unit=reachlog-ai.service
+
+[Install]
+WantedBy=timers.target

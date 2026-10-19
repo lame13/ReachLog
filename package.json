@@ -1,6 +1,6 @@
 {
   "name": "reachlog",
-  "version": "0.4.0",
+  "version": "1.0.0",
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "build": "node scripts/build-package.mjs",
@@ -20,6 +20,7 @@
     "worker:list-mailboxes": "node --import tsx workers/list-mailboxes.ts",
     "worker:email-verify": "node --import tsx workers/email-verify.ts",
     "worker:followup-check": "node --import tsx workers/followup-check.ts",
+    "worker:ai": "node --import tsx workers/ai.ts",
     "worker:backup": "node --import tsx workers/backup.ts",
     "demo": "node dist/cli.cjs demo",
     "pretest": "node scripts/check-node.mjs",

@@ -10,7 +10,7 @@ export function getSchedules(): Schedule[] {
       `SELECT name, enabled, interval_minutes AS intervalMinutes,
     next_run_at AS nextRunAt, last_started_at AS lastStartedAt, last_finished_at AS lastFinishedAt,
     last_success_at AS lastSuccessAt, last_status AS lastStatus, last_error AS lastError
-    FROM background_schedules ORDER BY CASE name WHEN 'mail-sync' THEN 0 WHEN 'followup-check' THEN 1 ELSE 2 END`,
+    FROM background_schedules ORDER BY CASE name WHEN 'mail-sync' THEN 0 WHEN 'followup-check' THEN 1 WHEN 'ai' THEN 2 ELSE 3 END`,
     )
     .all() as Schedule[];
 }
@@ -27,6 +27,8 @@ export function scheduleBlocker(name: ScheduleName) {
     (!env.TELEGRAM_ENABLED || !env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID)
   )
     return "Connect and enable Telegram first.";
+  if (name === "ai" && (!env.AI_ENABLED || !env.AI_BASE_URL || !env.AI_MODEL))
+    return "Configure and enable AI automation in Settings first.";
   return null;
 }
 

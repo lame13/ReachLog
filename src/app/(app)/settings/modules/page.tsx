@@ -37,6 +37,7 @@ export default function SettingsPage() {
           blockers={{
             "mail-sync": scheduleBlocker("mail-sync"),
             "followup-check": scheduleBlocker("followup-check"),
+            ai: scheduleBlocker("ai"),
             backup: scheduleBlocker("backup"),
           }}
           remindersAvailable={Boolean(

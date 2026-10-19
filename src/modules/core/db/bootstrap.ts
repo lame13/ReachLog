@@ -241,7 +241,7 @@ export function bootstrapDatabase(sqlite: SqliteDatabase) {
         updated_at TEXT NOT NULL
       );
       CREATE TABLE IF NOT EXISTS background_schedules (
-        name TEXT PRIMARY KEY CHECK(name IN ('mail-sync', 'followup-check', 'backup')),
+        name TEXT PRIMARY KEY CHECK(name IN ('mail-sync', 'followup-check', 'ai', 'backup')),
         enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0, 1)),
         interval_minutes INTEGER NOT NULL CHECK(interval_minutes BETWEEN 1 AND 10080),
         next_run_at TEXT,
@@ -258,6 +258,7 @@ export function bootstrapDatabase(sqlite: SqliteDatabase) {
     recordSchemaVersion(sqlite, "0007", "connections_scheduling_templates");
   })();
 
+  ensureAiAutomationSchema(sqlite);
   applyAccountsAndPipelineMigration(sqlite, upgradeToAccounts);
 
   const seeded = sqlite
@@ -297,6 +298,99 @@ function ensureMessageReadColumns(sqlite: SqliteDatabase) {
   if (!tableHasColumn(sqlite, "messages", "read_at")) {
     sqlite.exec("ALTER TABLE messages ADD COLUMN read_at TEXT");
   }
+}
+
+/**
+ * 0009 adds the AI run ledger, thread assessment fields and the fourth
+ * background schedule. SQLite cannot change a CHECK constraint in place, so an
+ * existing schedule table is rebuilt with every row preserved.
+ */
+function ensureAiAutomationSchema(sqlite: SqliteDatabase) {
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS ai_runs (
+      id TEXT PRIMARY KEY,
+      kind TEXT NOT NULL,
+      entity_type TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      target_id TEXT REFERENCES targets(id),
+      input_hash TEXT NOT NULL,
+      prompt_version TEXT NOT NULL,
+      model TEXT NOT NULL,
+      status TEXT NOT NULL,
+      review_status TEXT NOT NULL DEFAULT 'none',
+      output_json TEXT,
+      error TEXT,
+      prompt_tokens INTEGER NOT NULL DEFAULT 0,
+      completion_tokens INTEGER NOT NULL DEFAULT 0,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      applied_at TEXT,
+      reviewed_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS ai_runs_identity_unique
+      ON ai_runs(kind, entity_id, input_hash);
+    CREATE INDEX IF NOT EXISTS ai_runs_review_idx
+      ON ai_runs(review_status, created_at);
+    CREATE INDEX IF NOT EXISTS ai_runs_target_idx
+      ON ai_runs(target_id, created_at);
+  `);
+
+  const threadColumns = [
+    ["ai_intent", "TEXT"],
+    ["ai_confidence", "REAL"],
+    ["ai_stage_suggestion", "TEXT"],
+    ["ai_summary", "TEXT"],
+    ["ai_assessed_at", "TEXT"]
+  ] as const;
+
+  for (const [column, definition] of threadColumns) {
+    if (!tableHasColumn(sqlite, "threads", column)) {
+      sqlite.exec(`ALTER TABLE threads ADD COLUMN ${column} ${definition}`);
+    }
+  }
+
+  const scheduleTable = sqlite
+    .prepare(
+      "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'background_schedules'"
+    )
+    .get() as { sql: string } | undefined;
+
+  if (scheduleTable && !scheduleTable.sql.includes("'ai'")) {
+    sqlite.transaction(() => {
+      sqlite.exec(`
+        ALTER TABLE background_schedules RENAME TO background_schedules_0008;
+        CREATE TABLE background_schedules (
+          name TEXT PRIMARY KEY CHECK(name IN ('mail-sync', 'followup-check', 'ai', 'backup')),
+          enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0, 1)),
+          interval_minutes INTEGER NOT NULL CHECK(interval_minutes BETWEEN 1 AND 10080),
+          next_run_at TEXT,
+          last_started_at TEXT,
+          last_finished_at TEXT,
+          last_success_at TEXT,
+          last_status TEXT NOT NULL DEFAULT 'never' CHECK(last_status IN ('never', 'running', 'success', 'failed', 'skipped', 'interrupted')),
+          last_error TEXT,
+          updated_at TEXT NOT NULL
+        );
+        INSERT INTO background_schedules (
+          name, enabled, interval_minutes, next_run_at, last_started_at,
+          last_finished_at, last_success_at, last_status, last_error, updated_at
+        )
+        SELECT
+          name, enabled, interval_minutes, next_run_at, last_started_at,
+          last_finished_at, last_success_at, last_status, last_error, updated_at
+        FROM background_schedules_0008;
+        DROP TABLE background_schedules_0008;
+      `);
+    })();
+  }
+
+  sqlite
+    .prepare(
+      "INSERT INTO background_schedules (name, interval_minutes, updated_at) VALUES ('ai', 5, ?) ON CONFLICT(name) DO NOTHING"
+    )
+    .run(new Date().toISOString());
+  recordSchemaVersion(sqlite, "0009", "ai_automation");
 }
 
 function ensureAccountsAndPipelineColumns(sqlite: SqliteDatabase) {

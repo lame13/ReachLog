@@ -30,6 +30,13 @@ export const modules = [
     jobs: ["emailVerify"]
   },
   {
+    key: "ai",
+    label: "AI automation",
+    enabled: env.AI_ENABLED && !env.DEMO_MODE,
+    envFlag: "AI_ENABLED",
+    jobs: ["replyTriage", "followupDraft", "unlinkedLead"]
+  },
+  {
     key: "demo",
     label: "Demo safety mode",
     enabled: env.DEMO_MODE,

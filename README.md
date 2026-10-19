@@ -101,6 +101,7 @@ the stages do not cover.
 - Track people as **contacts**, with a title, phone, tags, links and their own history.
 - Move each target through a **pipeline**: New, Contacted, Replied, In conversation, Qualified, Won or Lost.
 - Track outreach history and do-not-contact records.
+- Triage replies, draft follow-ups, and capture unlinked leads with an OpenAI-compatible AI provider.
 - Import CSV files with a duplicate check before changes are made.
 - Save email drafts and schedule manual follow-ups.
 - Reuse email templates with contact variables, previews, and editable messages.
@@ -148,7 +149,7 @@ reachlog worker followup-check
 reachlog worker backup
 ```
 
-Open **Settings → Background tasks** to enable schedules, choose intervals, run a task now, and check the last run, last success, next run, or failure. New schedules start paused; upgrades preserve your existing settings. They run only while ReachLog is running. An overdue task runs once after restart; missed intervals are not replayed. Follow-up notifications do not send follow-up emails.
+Open **Settings → Background tasks** to enable schedules, choose intervals, run a task now, and check the last run, last success, next run, or failure. New schedules start paused; upgrades preserve your existing settings. They run only while ReachLog is running. An overdue task runs once after restart; missed intervals are not replayed. Follow-up reminders do not send email; AI autopilot can, only when explicitly enabled.
 
 For an existing cron or systemd setup, start with `reachlog --no-scheduler` or `REACHLOG_SCHEDULER_ENABLED=false`. One-shot worker commands remain available and share worker locks with built-in scheduling.
 
@@ -157,6 +158,22 @@ For an existing cron or systemd setup, start with `reachlog --no-scheduler` or `
 Open **Templates** to create, edit, or delete a reusable subject and body. Supported variables are `{{contact_name}}`, `{{company}}`, `{{email}}`, and `{{website}}`.
 
 In the email composer, choose a template to preview it for the current contact. **Use template** replaces the subject and body; **Undo template** restores the previous text. Edit the result before sending. Missing values remain visible and block sending until replaced; unfinished messages can still be saved as drafts. Deleting a template does not change saved drafts or sent messages.
+
+## AI automation
+
+ReachLog can automate three jobs without tying you to one vendor:
+
+- **Reply triage** reads the latest inbound message, extracts the ask and any commitment, suggests a pipeline stage with quoted evidence, and writes the next follow-up with a reply draft.
+- **Follow-up autopilot** writes the next email from the whole thread instead of a template. It can stop at a reviewable draft, or send inside an existing thread within a daily cap.
+- **Inbound lead capture** classifies mail that did not match a target, extracts the company and need, and either creates a target or puts the lead in **AI review**.
+
+Open **Settings → Connections → AI automation**. Any endpoint that implements `POST /v1/chat/completions` works: OpenAI, DeepSeek, MiMo, OpenRouter, Ollama, LM Studio, or a gateway such as LiteLLM for Claude. Set the base URL, API key, and exact model name, then test the connection.
+
+AI runs are asynchronous. Enable **AI automation** under **Settings → Background tasks**; the worker runs every five minutes by default. It never auto-marks a target Won, never overwrites a stage you changed manually in the previous seven days, and keeps confident but ambiguous decisions in **AI review**. Explicit opt-out language blocks sending.
+
+Auto-send is off by default. When enabled, it applies only to a follow-up inside an existing thread, only when no newer reply exists, only within the daily limit, and only while the target passes the normal do-not-contact, bounce, and email-verification guards. Cold outreach is never sent automatically.
+
+Email content sent for triage, drafting, or lead extraction leaves your machine and goes to the provider you configure. The API key is stored in `connections.json` with owner-only permissions and is not returned to the browser.
 
 ## Network access
 

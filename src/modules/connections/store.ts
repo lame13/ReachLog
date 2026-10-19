@@ -211,7 +211,9 @@ export function validateConnection(
       ? ["SMTP_HOST", "SMTP_FROM"]
       : group === "imap"
         ? ["IMAP_HOST", "IMAP_USER", "IMAP_PASS", "IMAP_MAILBOXES"]
-        : ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"];
+        : group === "telegram"
+          ? ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"]
+          : ["AI_BASE_URL", "AI_MODEL"];
   for (const key of required)
     if (requireComplete && !values[key]?.trim())
       errors[key] = "This field is required.";
@@ -260,6 +262,22 @@ export function validateConnection(
     !/^\d+:[A-Za-z0-9_-]+$/.test(values.TELEGRAM_BOT_TOKEN)
   )
     errors.TELEGRAM_BOT_TOKEN = "Enter the token supplied by BotFather.";
+  if (group === "ai") {
+    const baseUrl = values.AI_BASE_URL?.trim();
+    if (baseUrl) {
+      try {
+        const parsed = new URL(baseUrl);
+        if (!["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password)
+          errors.AI_BASE_URL = "Use an http or https URL without embedded credentials.";
+      } catch {
+        errors.AI_BASE_URL = "Enter a valid endpoint URL.";
+      }
+    }
+    if (values.AI_MODEL && (values.AI_MODEL.length > 200 || /[\r\n\0]/.test(values.AI_MODEL)))
+      errors.AI_MODEL = "Enter one model name on a single line.";
+    if (values.AI_DAILY_SEND_LIMIT && Number(values.AI_DAILY_SEND_LIMIT) > 100)
+      errors.AI_DAILY_SEND_LIMIT = "Choose a daily limit of 100 or less.";
+  }
   if (Object.keys(errors).length) throw new ConnectionInputError(errors);
 }
 

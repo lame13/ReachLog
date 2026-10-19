@@ -27,7 +27,7 @@ const env = {
   DOTENV_CONFIG_PATH: path.join(scratch, ".env"), REACHLOG_SCHEDULER_ENABLED: "false"
 };
 for (const key of Object.keys(env)) {
-  if (/^(SMTP_|IMAP_|TELEGRAM_|EMAILLISTVERIFY_|APP_BASIC_AUTH_|NEXT_PUBLIC_)/.test(key)) delete env[key];
+  if (/^(SMTP_|IMAP_|TELEGRAM_|EMAILLISTVERIFY_|AI_|APP_BASIC_AUTH_|NEXT_PUBLIC_)/.test(key)) delete env[key];
 }
 await rm("dist", { recursive: true, force: true });
 const next = spawnSync(process.execPath, [require.resolve("next/dist/bin/next"), "build", "--webpack"], { env, stdio: "inherit" });

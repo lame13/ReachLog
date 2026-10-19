@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import {
   BarChart3,
+  Bot,
   Building2,
   CircleDollarSign,
   Database,
@@ -28,6 +29,7 @@ const navItems = [
   { href: "/contacts", label: "Contacts", icon: Users },
   { href: "/targets", label: "Targets", icon: Target },
   { href: "/followups", label: "Follow-ups", icon: Inbox },
+  { href: "/review", label: "AI review", icon: Bot },
   { href: "/templates", label: "Templates", icon: FileText },
   { href: "/import", label: "Import", icon: Upload },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
@@ -37,11 +39,13 @@ const navItems = [
 export function AppShell({
   children,
   demoMode = false,
-  dueFollowups = 0
+  dueFollowups = 0,
+  pendingReviews = 0
 }: {
   children: React.ReactNode;
   demoMode?: boolean;
   dueFollowups?: number;
+  pendingReviews?: number;
 }) {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -76,8 +80,15 @@ export function AppShell({
               >
                 <Icon className="size-4" aria-hidden="true" />
                 {item.label}
-                <FollowupBadge
-                  count={item.href === "/followups" ? dueFollowups : 0}
+                <NavBadge
+                  count={
+                    item.href === "/followups"
+                      ? dueFollowups
+                      : item.href === "/review"
+                        ? pendingReviews
+                        : 0
+                  }
+                  noun={item.href === "/review" ? "review item" : "follow-up"}
                 />
               </Link>
             );
@@ -132,8 +143,15 @@ export function AppShell({
                   >
                     <Icon className="size-4" aria-hidden="true" />
                     {item.label}
-                    <FollowupBadge
-                      count={item.href === "/followups" ? dueFollowups : 0}
+                    <NavBadge
+                      count={
+                        item.href === "/followups"
+                          ? dueFollowups
+                          : item.href === "/review"
+                            ? pendingReviews
+                            : 0
+                      }
+                      noun={item.href === "/review" ? "review item" : "follow-up"}
                     />
                   </Link>
                 );
@@ -186,7 +204,7 @@ export function AppShell({
   );
 }
 
-function FollowupBadge({ count }: { count: number }) {
+function NavBadge({ count, noun }: { count: number; noun: string }) {
   if (count <= 0) {
     return null;
   }
@@ -200,7 +218,7 @@ function FollowupBadge({ count }: { count: number }) {
         {count > 99 ? "99+" : count}
       </span>
       <span className="sr-only">
-        {count === 1 ? "1 follow-up due" : `${count} follow-ups due`}
+        {count === 1 ? `1 ${noun}` : `${count} ${noun}s`}
       </span>
     </>
   );

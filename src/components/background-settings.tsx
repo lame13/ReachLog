@@ -74,7 +74,9 @@ export function BackgroundSettings({
             hint={
               schedule.name === "followup-check" && !remindersAvailable
                 ? "Without Telegram, due follow-ups still appear in ReachLog: the Follow-ups queue lists them and the sidebar shows a count."
-                : null
+                : schedule.name === "ai"
+                  ? "Suggestions that need a decision appear under AI review. Auto-sending stays off unless you enable it in the AI connection."
+                  : null
             }
             demo={demo}
           />

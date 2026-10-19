@@ -922,7 +922,9 @@ function createUnlinkedMailEvent({
         subject,
         normalizedSubject,
         from: parsed.from?.text,
-        to: addressText(parsed.to)
+        to: addressText(parsed.to),
+        bodyText: extractReplySnippet(parsed.text),
+        receivedAt: getMessageDate(parsed)
       }),
       new Date().toISOString()
     );
@@ -998,6 +1000,26 @@ function classifyNonActionableInboundMessage(
   const listId = String(parsed.headers.get("list-id") ?? "").toLowerCase();
   const listPost = String(parsed.headers.get("list-post") ?? "").toLowerCase();
   const mailingList = `${listId} ${listPost}`;
+  const autoSubmitted = String(parsed.headers.get("auto-submitted") ?? "").toLowerCase();
+  const autoReplyHeader = [
+    parsed.headers.get("x-autoreply"),
+    parsed.headers.get("x-autorespond"),
+    parsed.headers.get("x-auto-response-suppress"),
+    parsed.headers.get("precedence")
+  ]
+    .map((value) => String(value ?? "").toLowerCase())
+    .join(" ");
+
+  if (
+    autoSubmitted.includes("auto-replied") ||
+    autoReplyHeader.includes("auto_reply") ||
+    autoReplyHeader.includes("auto-reply") ||
+    /^(out of office|automatic reply|auto[- ]?reply|vacation reply|away from my desk)/i.test(
+      subject.trim()
+    )
+  ) {
+    return { nonActionable: true, reason: "auto_reply" };
+  }
 
   if (
     normalizedSubject.includes("wordpress.org thread:") ||

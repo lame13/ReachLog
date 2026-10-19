@@ -247,7 +247,7 @@ await t.test('a compressed backup is verified without touching the live database
 
   const result = verifyBackupFile(backup);
   assert.equal(result.integrity, 'ok');
-  assert.equal(result.schemaVersion, '0008');
+  assert.equal(result.schemaVersion, '0009');
   assert.equal(result.counts.contacts, (sqlite.prepare('SELECT count(*) AS n FROM contacts').get() as { n: number }).n);
   assert.equal(result.counts.targets, (sqlite.prepare('SELECT count(*) AS n FROM targets').get() as { n: number }).n);
   assert.equal(result.counts.messages, (sqlite.prepare('SELECT count(*) AS n FROM messages').get() as { n: number }).n);
@@ -295,7 +295,7 @@ await t.test('CLI rejects unsafe network exposure and invalid input before creat
   const verified = run(['verify-backup', backup]);
   assert.equal(verified.status, 0, verified.stderr);
   assert.match(verified.stdout, /Integrity check: ok/);
-  assert.match(verified.stdout, /Schema version: 0008/);
+  assert.match(verified.stdout, /Schema version: 0009/);
   assert.match(run(['verify-backup']).stderr, /Usage: reachlog verify-backup/);
   const missing = run(['verify-backup', path.join(directory, 'missing.sqlite.gz')]);
   assert.notEqual(missing.status, 0);

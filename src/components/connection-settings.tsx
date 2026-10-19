@@ -162,7 +162,7 @@ function ConnectionForm({
           .env file. Update those there and restart ReachLog.
         </p>
       )}
-      {initial.group !== "telegram" && (
+      {(initial.group === "smtp" || initial.group === "imap") && (
         <div className="flex flex-wrap items-center gap-3">
           <button
             type="button"
@@ -388,7 +388,9 @@ function ConnectionForm({
       <p className="text-xs text-muted">
         {dirty
           ? "Save changes before testing."
-          : "Connection tests do not send email or notifications."}
+          : initial.group === "ai"
+            ? "The AI test sends one short prompt to the configured endpoint."
+            : "Connection tests do not send email or notifications."}
         {view.check && !dirty && (
           <>
             {" "}

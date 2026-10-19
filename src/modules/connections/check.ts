@@ -4,6 +4,7 @@ import { getImapFlowOptions } from "../mailbox/imap-client";
 import { smtpTransportOptions } from "../smtp/transport";
 import { selectSmtpIdentity } from "../smtp/from-identities";
 import { env } from "../core/env";
+import { testAiProvider } from "../ai/provider";
 import {
   connectionFingerprint,
   effectiveConnectionValues,
@@ -95,12 +96,20 @@ export async function testConnection(group: ConnectionGroup) {
       } finally {
         client.close();
       }
-    } else {
+    } else if (group === "telegram") {
       await checkTelegramConnection(
         env.TELEGRAM_BOT_TOKEN ?? "",
         env.TELEGRAM_CHAT_ID ?? "",
       );
       check.message = "Bot and chat are reachable. No notification was sent.";
+    } else {
+      await testAiProvider({
+        baseUrl: env.AI_BASE_URL,
+        model: env.AI_MODEL,
+        apiKey: env.AI_API_KEY?.trim() || undefined,
+      });
+      check.message =
+        "The endpoint answered with the configured model. A small test prompt was sent.";
     }
     if (group !== "imap") check.ok = true;
   } catch {
@@ -108,7 +117,9 @@ export async function testConnection(group: ConnectionGroup) {
     check.message =
       group === "telegram"
         ? "Could not connect. Check the bot token and chat ID, and start a conversation with your bot."
-        : "Could not connect. Check the host, port, encryption, and login details. If using Proton Bridge, make sure it is running.";
+        : group === "ai"
+          ? "Could not complete the AI test. Check the base URL, API key, model name, and provider availability."
+          : "Could not connect. Check the host, port, encryption, and login details. If using Proton Bridge, make sure it is running.";
   }
   if (!recordConnectionCheck(group, check))
     throw new Error(

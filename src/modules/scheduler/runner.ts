@@ -57,7 +57,7 @@ export function startScheduler(options: {
         child.kill("SIGTERM");
         killTimer = setTimeout(() => child.kill("SIGKILL"), 5000);
       },
-      name === "followup-check" ? 120_000 : 1_800_000,
+      name === "followup-check" ? 120_000 : name === "ai" ? 900_000 : 1_800_000,
     );
     const done = new Promise<void>((resolve) => {
       child.once("error", () => {

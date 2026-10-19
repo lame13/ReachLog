@@ -2,6 +2,7 @@ import { relations } from "drizzle-orm";
 import {
   index,
   integer,
+  real,
   sqliteTable,
   text,
   uniqueIndex
@@ -130,6 +131,11 @@ export const threads = sqliteTable(
     lastOutboundAt: text("last_outbound_at"),
     nextFollowupAt: text("next_followup_at"),
     status: text("status").notNull(),
+    aiIntent: text("ai_intent"),
+    aiConfidence: real("ai_confidence"),
+    aiStageSuggestion: text("ai_stage_suggestion"),
+    aiSummary: text("ai_summary"),
+    aiAssessedAt: text("ai_assessed_at"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull()
   },
@@ -317,6 +323,43 @@ export const moduleSettings = sqliteTable("module_settings", {
   settingsJson: text("settings_json"),
   updatedAt: text("updated_at").notNull()
 });
+
+export const aiRuns = sqliteTable(
+  "ai_runs",
+  {
+    id: text("id").primaryKey(),
+    kind: text("kind").notNull(),
+    entityType: text("entity_type").notNull(),
+    entityId: text("entity_id").notNull(),
+    targetId: text("target_id").references(() => targets.id),
+    inputHash: text("input_hash").notNull(),
+    promptVersion: text("prompt_version").notNull(),
+    model: text("model").notNull(),
+    status: text("status").notNull(),
+    reviewStatus: text("review_status").notNull().default("none"),
+    outputJson: text("output_json"),
+    error: text("error"),
+    promptTokens: integer("prompt_tokens").notNull().default(0),
+    completionTokens: integer("completion_tokens").notNull().default(0),
+    attempts: integer("attempts").notNull().default(0),
+    appliedAt: text("applied_at"),
+    reviewedAt: text("reviewed_at"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull()
+  },
+  (table) => ({
+    identityUnique: uniqueIndex("ai_runs_identity_unique").on(
+      table.kind,
+      table.entityId,
+      table.inputHash
+    ),
+    reviewIdx: index("ai_runs_review_idx").on(
+      table.reviewStatus,
+      table.createdAt
+    ),
+    targetIdx: index("ai_runs_target_idx").on(table.targetId, table.createdAt)
+  })
+);
 
 export const accountsRelations = relations(accounts, ({ many }) => ({
   contacts: many(contacts),

@@ -25,7 +25,7 @@ Options:
   --help               Show this help
   --version            Print the installed version
 
-Workers: mail-sync, mail-resync, list-mailboxes, followup-check,
+Workers: mail-sync, mail-resync, list-mailboxes, followup-check, ai,
          email-verify, backup
 
 verify-backup checks a compressed backup before you restore it.
@@ -65,7 +65,7 @@ async function main() {
     return;
   }
   const workerNames = new Set([
-    "mail-sync", "mail-resync", "list-mailboxes", "followup-check", "email-verify", "backup"
+    "mail-sync", "mail-resync", "list-mailboxes", "followup-check", "ai", "email-verify", "backup"
   ]);
   if (!["start", "demo", "worker"].includes(command)) {
     throw new Error(`Unknown command: ${command}. Run reachlog --help.`);
@@ -139,7 +139,7 @@ async function main() {
     SEED_DEMO_DATA: String(demo)
   };
   if (demo) {
-    for (const key of ["SMTP_ENABLED", "IMAP_ENABLED", "TELEGRAM_ENABLED", "EMAILLISTVERIFY_ENABLED"] as const) {
+    for (const key of ["SMTP_ENABLED", "IMAP_ENABLED", "TELEGRAM_ENABLED", "EMAILLISTVERIFY_ENABLED", "AI_ENABLED"] as const) {
       childEnv[key] = "false";
     }
   }

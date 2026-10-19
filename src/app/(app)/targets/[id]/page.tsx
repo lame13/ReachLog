@@ -23,6 +23,7 @@ import {
 import { getSendFeedback } from "@/modules/smtp/feedback";
 import { pipelineStages } from "@/modules/pipeline/stages";
 import { getTimeline } from "@/modules/timeline/events";
+import { getLatestTargetAiReview } from "@/modules/ai/review";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -49,6 +50,7 @@ export default async function TargetDetailPage({
 
   const { target, threads, messages, followups, forms } = detail;
   const timeline = getTimeline({ targetIds: [target.id] });
+  const aiReview = getLatestTargetAiReview(target.id);
   const tomorrow = getDateInputValue(1);
   const nextOpenFollowup = followups
     .filter((followup) => followup.status === "open")
@@ -197,6 +199,46 @@ export default async function TargetDetailPage({
         </div>
 
         <aside className="space-y-6">
+          {aiReview && (
+            <section className="rounded-lg border border-line bg-white shadow-sm">
+              <div className="flex items-center justify-between border-b border-line px-4 py-3">
+                <h2 className="font-semibold">AI assessment</h2>
+                <Link className="text-xs text-accent hover:underline" href="/review">
+                  Review queue
+                </Link>
+              </div>
+              <div className="space-y-3 p-4 text-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-md bg-panel px-2 py-1 text-xs font-medium capitalize">
+                    {aiReview.output.intent.replaceAll("_", " ")}
+                  </span>
+                  <span className="text-xs text-muted">
+                    {Math.round(aiReview.output.confidence * 100)}% confidence
+                  </span>
+                </div>
+                <p className="text-muted">{aiReview.output.summary}</p>
+                {aiReview.output.evidence.length > 0 && (
+                  <ul className="space-y-1 border-l-2 border-line pl-3 text-xs text-muted">
+                    {aiReview.output.evidence.slice(0, 3).map((quote) => (
+                      <li key={quote}>“{quote}”</li>
+                    ))}
+                  </ul>
+                )}
+                {aiReview.output.suggestedStage && (
+                  <p className="text-xs">
+                    Suggested stage:{" "}
+                    <span className="font-medium capitalize">
+                      {aiReview.output.suggestedStage.replaceAll("_", " ")}
+                    </span>
+                  </p>
+                )}
+                <p className="text-xs text-muted">
+                  {aiReview.output.nextAction.reason}
+                </p>
+              </div>
+            </section>
+          )}
+
           <section className="rounded-lg border border-line bg-white shadow-sm">
             <div className="border-b border-line px-4 py-3">
               <h2 className="font-semibold">Email Verification</h2>

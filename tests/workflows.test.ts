@@ -208,7 +208,7 @@ test("0.2.0 workflows", async (t) => {
               )
               .get() as { count: number }
           ).count,
-          3,
+          4,
         );
         assert.deepEqual(old.pragma("foreign_key_check"), []);
         assert.equal(old.pragma("integrity_check", { simple: true }), "ok");

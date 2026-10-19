@@ -1,4 +1,4 @@
-export const scheduleNames = ["mail-sync", "followup-check", "backup"] as const;
+export const scheduleNames = ["mail-sync", "followup-check", "ai", "backup"] as const;
 export type ScheduleName = (typeof scheduleNames)[number];
 export const scheduleDefinitions: Record<
   ScheduleName,
@@ -12,7 +12,12 @@ export const scheduleDefinitions: Record<
   "followup-check": {
     title: "Follow-up reminders",
     description:
-      "Send Telegram reminders for due follow-ups. Emails are always sent manually.",
+      "Send Telegram reminders for due follow-ups. AI follow-up sending is controlled separately.",
+  },
+  ai: {
+    title: "AI automation",
+    description:
+      "Triage new replies, draft follow-ups, and capture unlinked inbound leads.",
   },
   backup: {
     title: "Database backups",

@@ -1,49 +1,62 @@
-# ReachLog 0.4.0
+# ReachLog 1.0.0
 
-ReachLog now keeps companies and people as records of their own, and shows your
-outreach on a pipeline board. Accounts, contacts and targets each have an
-activity timeline, and the new fields are included in CSV and JSON exports.
+ReachLog now runs three AI jobs against the mailbox and pipeline it already
+tracks. It is not a chat box bolted onto the composer. The worker reads new
+replies, changes state when the evidence is strong, writes the next follow-up
+from the actual thread, and captures inbound mail that never matched a target.
 
-## Accounts and contacts
+## Bring your own provider
 
-Every target already named a company. ReachLog now turns those companies into
-**accounts**: created for you when you add or import a target, and available on
-their own page with the contacts, targets, mail and notes that belong to them.
-Targets are matched to accounts by company domain, or by name when no domain is
-available.
+Open **Settings → Connections → AI automation** and enter a base URL, API key,
+and model. ReachLog uses `POST /v1/chat/completions`, so OpenAI, DeepSeek, MiMo,
+OpenRouter, Ollama, LM Studio, and compatible gateways work without code
+changes. Claude can be used through an OpenAI-compatible gateway.
 
-**Contacts** get a list and a page of their own, with a title, phone, tags,
-links, notes and the account they belong to. Filter by search, domain, tag or
-account.
+The provider stays optional. With AI disabled, ReachLog behaves as before.
 
-## Pipeline
+## Reply triage
 
-Every target now has a stage: **New, Contacted, Replied, In conversation,
-Qualified, Won** or **Lost**. The new `/pipeline` page shows a column per stage,
-and moving a card updates the stage, keeps the outreach status in step, and
-records the move on the shared timeline. Moving a card to Lost cancels that
-target's open follow-ups, the same as marking it dead always did. The dashboard
-and Analytics count each stage.
+Every new inbound message is classified as interested, a question, not now, a
+decline, a referral, an out-of-office reply, a vendor pitch, automated mail, or
+unclear. The worker extracts the ask, any commitment, and exact supporting
+quotes, then:
 
-Existing send blocks stay in place when you move a card. The free-text status
-is still available and included in exports. Stages are managed by hand after
-the initial migration; mailbox sync does not move cards.
+- moves the pipeline forward at high confidence;
+- records the suggested stage even when it does not apply it;
+- creates the next follow-up with a reply draft;
+- sends ambiguous or negative replies to **AI review**.
 
-## Read-only demo
+It never auto-marks Won. It does not overwrite a stage changed by hand in the
+previous seven days. Explicit opt-out language blocks future sending.
 
-`reachlog demo` now lets you browse sample data without changing it. Editing,
-imports and sending are blocked. The package includes systemd, Caddy and nginx
-examples for hosting a public demo with `REACHLOG_DEMO_PUBLIC=true`.
+## Follow-up autopilot
 
-## Upgrading from 0.3.0
+Due follow-ups are no longer generic reminders. The worker reads the thread and
+writes the next email: the unresolved question, the promised material, and one
+clear next step. The draft appears on the follow-up and in the send composer.
+
+Auto-send is off by default. When enabled, it applies only inside an existing
+thread, only when there is no newer reply, only within the daily limit, and only
+after the normal do-not-contact, bounce, and email-verification checks. Cold
+outreach is never sent automatically.
+
+## Inbound lead capture
+
+Mail that does not match a target is no longer only an event row. The worker
+classifies it, extracts the company, person, need, budget, and timeline, and
+creates a target for a high-confidence business lead. Everything else goes to
+**AI review** with the source message attached.
+
+## Upgrade
 
 ```sh
-npm install --global reachlog@0.4.0
+npm install --global reachlog@1.0.0
 ```
 
-Database migration 0008 runs on first start. Your companies become accounts,
-your existing statuses are translated into stages, and your records and history
-are retained. A stage you set by hand is never overwritten by a later start. Keep your
-data directory and back up your database first.
+Migrations through 0009 run on first start. Existing targets, contacts,
+accounts, threads, drafts, follow-ups, and schedules are retained. The AI
+schedule starts paused. Configure a provider, run the connection test, enable
+**AI automation** under **Settings → Background tasks**, and leave auto-send off
+until the drafts look right.
 
-Node.js 22 or 24 is still required, and dependencies are unchanged.
+Back up the data directory first. Node.js 22 or 24 is required.

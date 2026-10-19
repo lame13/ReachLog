@@ -19,6 +19,7 @@ import { isEmailVerificationBlocking } from "@/modules/emailVerification/service
 import { resolveSendAnomalyAction } from "@/modules/smtp/anomaly-actions";
 import { completeAcceptedSendAction } from "@/modules/smtp/actions";
 import { getSendFeedback } from "@/modules/smtp/feedback";
+import { getPendingAiReviewCount } from "@/modules/ai/review";
 
 const sendStatusLabels: Record<string, string> = {
   failed: "send failed",
@@ -39,6 +40,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   const pipeline = getPipelineSummary();
   const sendTarget = getSendTarget(params?.sendTargetId);
   const sendFeedback = getSendFeedback(params);
+  const pendingAiReviews = getPendingAiReviewCount();
 
   if (!data.stats.totalTargets) {
     return (
@@ -66,6 +68,19 @@ export default async function DashboardPage({ searchParams }: PageProps) {
           </p>
         </div>
       </div>
+
+      {pendingAiReviews > 0 && (
+        <Link
+          className="mb-4 flex items-center justify-between rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900 hover:border-sky-300"
+          href="/review"
+        >
+          <span>
+            {pendingAiReviews} AI suggestion{pendingAiReviews === 1 ? "" : "s"}{" "}
+            waiting for review.
+          </span>
+          <span className="font-medium">Open review</span>
+        </Link>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard

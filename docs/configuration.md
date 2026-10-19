@@ -80,6 +80,29 @@ reachlog worker mail-resync
 
 Resync looks back 30 days unless `MAIL_SYNC_RESYNC_DAYS` is set. Imports that add email targets request a later automatic resync. Message IDs prevent duplicate imports. Messages are attached using reply headers, participants, domains and subjects; review ambiguous matches.
 
+## AI automation
+
+Configure AI in **Settings → Connections → AI automation**, or with environment values:
+
+```dotenv
+AI_ENABLED=true
+AI_BASE_URL=https://api.openai.com/v1
+AI_API_KEY=your-key
+AI_MODEL=gpt-4o-mini
+AI_AUTO_SEND=false
+AI_DAILY_SEND_LIMIT=5
+```
+
+`AI_BASE_URL` points at any OpenAI-compatible API root. ReachLog calls `<base-url>/chat/completions`. OpenAI, DeepSeek, MiMo, OpenRouter, Ollama, and LM Studio use this protocol directly. Claude can be reached through an OpenAI-compatible gateway such as LiteLLM or OpenRouter. The API key may be empty for a local endpoint that does not require one. **Test connection** sends a short prompt, so it consumes a small amount of provider credit.
+
+The AI worker performs three jobs:
+
+- Reply triage extracts intent, asks, commitments, and a suggested stage from the latest inbound message. It records quoted evidence and applies only forward stage moves at high confidence. Manually changed stages are protected for seven days.
+- Follow-up drafting writes the next email from the thread and saves it on the due follow-up. Auto-send is off by default. When enabled, it sends only inside an existing thread, only when no newer reply exists, only within `AI_DAILY_SEND_LIMIT`, and only through the normal send guards.
+- Unlinked lead capture classifies mail that did not match a target. High-confidence business leads become targets with their source event; ambiguous mail stays in **AI review**.
+
+Email text is sent to the configured provider. Do not enable AI on a mailbox whose contents cannot leave that machine. Model output is validated against a strict JSON schema; invalid output is retried once and then recorded as a failure. AI runs, token usage, and review decisions are stored in `ai_runs`.
+
 ## Optional notifications and address checks
 
 Telegram requires a bot token and chat ID, configured in Settings or with `TELEGRAM_ENABLED=true`, `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`. **Test connection** checks bot and chat access without sending a message. **Send test notification** sends a real notification to that chat. Reply and due-date notifications can contain contact details and message excerpts.
@@ -88,7 +111,7 @@ EmailListVerify requires `EMAILLISTVERIFY_ENABLED=true` and `EMAILLISTVERIFY_API
 
 ## Scheduled tasks
 
-Built-in scheduling starts with the packaged CLI and `npm run dev`. Enable each schedule under **Settings → Background tasks**. Default intervals are five minutes for mailbox sync, fifteen minutes for follow-up reminders, and one day for backups. Intervals can be changed from one minute to one week. New installations and upgrades leave every schedule paused. Mail sync requires IMAP to be enabled; follow-up reminders require Telegram.
+Built-in scheduling starts with the packaged CLI and `npm run dev`. Enable each schedule under **Settings → Background tasks**. Default intervals are five minutes for mailbox sync, fifteen minutes for follow-up reminders, five minutes for AI automation, and one day for backups. Intervals can be changed from one minute to one week. New installations and upgrades leave every schedule paused. Mail sync requires IMAP; follow-up reminders require Telegram; AI requires an enabled provider.
 
 **Run now** queues an enabled task for the next scheduler tick, normally within five seconds. The page refreshes run status while visible. Each task retains its last successful run even if a later attempt fails. Pausing prevents future runs but lets current work finish. The scheduler stops its workers when ReachLog stops, records interrupted runs, and retries due work after restart. Overdue intervals are coalesced into one run. Only one scheduler owns a database at a time, and worker leases prevent overlapping runs with external workers. Scheduled SMTP sending is not supported.
 
@@ -98,10 +121,11 @@ For external scheduling, use `reachlog --no-scheduler` or `REACHLOG_SCHEDULER_EN
 | --- | --- |
 | `reachlog worker mail-sync` | Every 5 minutes |
 | `reachlog worker followup-check` | Hourly |
+| `reachlog worker ai` | Every 5 minutes |
 | `reachlog worker email-verify` | Every 15 minutes, if enabled |
 | `reachlog worker backup` | Daily |
 
-Pass the same `--data-dir` and `--env-file` to every job. Workers use renewable database locks to avoid overlapping work; mail-sync, follow-up, and backup workers exit with code 75 when another worker already holds their lock. Follow-up checks notify you; they do not email contacts automatically.
+Pass the same `--data-dir` and `--env-file` to every job. Workers use renewable database locks to avoid overlapping work; mail-sync, follow-up, AI, and backup workers exit with code 75 when another worker already holds their lock. Follow-up checks only notify you. The separate AI worker sends only when auto-send is enabled.
 
 ## Network access
 

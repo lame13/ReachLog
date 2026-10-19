@@ -1,4 +1,4 @@
-export const connectionGroups = ["smtp", "imap", "telegram"] as const;
+export const connectionGroups = ["smtp", "imap", "telegram", "ai"] as const;
 export type ConnectionGroup = (typeof connectionGroups)[number];
 
 export type ConnectionField = {
@@ -133,6 +133,49 @@ export const connectionDefinitions: Record<
         type: "text",
         defaultValue: "",
         hint: "Start a conversation with your bot before testing.",
+      },
+    ],
+  },
+  ai: {
+    title: "AI automation",
+    description:
+      "Any OpenAI-compatible chat completions endpoint. ReachLog sends the relevant email text to this provider when triage, lead capture, or follow-up drafting runs.",
+    enabledKey: "AI_ENABLED",
+    fields: [
+      {
+        key: "AI_BASE_URL",
+        label: "Base URL",
+        type: "text",
+        defaultValue: "https://api.openai.com/v1",
+        hint: "OpenAI, DeepSeek, MiMo, OpenRouter, Ollama, LM Studio, or a gateway. Include /v1 when the provider expects it.",
+      },
+      {
+        key: "AI_API_KEY",
+        label: "API key",
+        type: "password",
+        defaultValue: "",
+        hint: "Leave blank, or use any placeholder, for a local endpoint that does not require a key.",
+      },
+      {
+        key: "AI_MODEL",
+        label: "Model",
+        type: "text",
+        defaultValue: "gpt-4o-mini",
+        hint: "The exact model name the provider expects.",
+      },
+      {
+        key: "AI_AUTO_SEND",
+        label: "Send follow-ups automatically",
+        type: "checkbox",
+        defaultValue: "false",
+        hint: "Only inside an existing thread, within the daily cap, and only when the thread has no newer reply.",
+      },
+      {
+        key: "AI_DAILY_SEND_LIMIT",
+        label: "Daily auto-send limit",
+        type: "number",
+        defaultValue: "5",
+        hint: "Maximum AI-sent follow-ups per calendar day.",
       },
     ],
   },

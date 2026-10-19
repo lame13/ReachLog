@@ -1,5 +1,43 @@
 # Changelog
 
+## 1.0.0 — 2026-10-20
+
+### Added
+
+- **AI automation** through any OpenAI-compatible chat completions endpoint.
+  Configure the base URL, API key, and model in Settings. OpenAI, DeepSeek,
+  MiMo, OpenRouter, Ollama, LM Studio, and compatible gateways use the same
+  client. Claude can be reached through an OpenAI-compatible gateway.
+- **Reply triage** classifies each new inbound message, extracts asks and
+  commitments with quoted evidence, moves the pipeline forward at high
+  confidence, and creates the next follow-up with a reply draft.
+- **Follow-up autopilot** writes the next email from the full thread and saves
+  it on the due follow-up. Optional auto-send is limited to existing threads,
+  has a daily cap, and respects every existing send guard.
+- **Unlinked lead capture** turns inbound business mail that did not match a
+  target into a target or an **AI review** item.
+- **AI review** page for suggestions that need a human decision, with accept
+  and reject actions and quoted evidence.
+- AI assessment cards on target pages, an AI review counter in navigation, and
+  a fourth background task for AI automation.
+- `reachlog worker ai` for external scheduling.
+
+### Changed
+
+- Out-of-office and automatic replies no longer cancel follow-ups or mark a
+  target as replied.
+- SMTP sending moved into a shared module so the web app and the AI worker use
+  the same guards, idempotency keys, and persistence path.
+- Unlinked mail events now retain a reply snippet for AI classification.
+
+### Upgrade
+
+- Database migration 0009 adds `ai_runs`, thread assessment fields, and the
+  `ai` background schedule. Existing data is retained.
+- AI is off by default. Configure a provider and enable the AI schedule before
+  any automated work runs.
+- Auto-send is off by default. Turn it on only after reviewing draft quality.
+
 ## 0.4.0 — 2026-09-29
 
 ### Added
