@@ -63,21 +63,25 @@ The browser script owns its test database, local SMTP fixture, application proce
 
 Update `package.json`, both root version fields in `npm-shrinkwrap.json`, `CHANGELOG.md`, and `RELEASE_NOTES.md`. Run the checks and install and exercise the resulting archive outside the checkout. Review and commit the release files, including any README images.
 
-For 1.0.0, after committing on `master`:
+For 1.0.1, after committing on `master`:
 
 ```sh
 nvm use
-git tag -a 1.0.0 -m "ReachLog 1.0.0"
+git tag -a 1.0.1 -m "ReachLog 1.0.1"
 git push origin master
-git push origin 1.0.0
+git push origin 1.0.1
 npm publish --access public
-gh release create 1.0.0 --verify-tag --title "ReachLog 1.0.0" --notes-file RELEASE_NOTES.md
+gh release create 1.0.1 --verify-tag --title "ReachLog 1.0.1" --notes-file RELEASE_NOTES.md
 ```
 
 Sign in with `npm login` and `gh auth login` if needed. Tags use the version
 number without a `v`, matching earlier releases. Publishing from the checkout
 runs `prepack`: a Node version check, typecheck, lint, tests, a fresh build and package inspection.
 After publishing, check the version, links and screenshots on the npm page.
+
+README screenshots use versioned public CDN URLs for assets already published
+in the npm package. Verify image URLs without repository credentials before
+publishing; private GitHub raw URLs cannot be used on the public npm page.
 
 Keep the `files` allowlist in `package.json` free of databases, connection files, private environment files and native binaries. `scripts/check-package.mjs` fails the build if any of them appear. Keep framework security updates current, and keep the release notes in `RELEASE_NOTES.md` short enough to read in a minute.
 

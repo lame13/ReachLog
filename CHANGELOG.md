@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.1 — 2026-10-20
+
+### Fixed
+
+- The npm README screenshots now load from the public npm package CDN.
+  The previous GitHub URLs required access to the private repository.
+  Image URLs are pinned to the published 1.0.0 assets.
+
 ## 1.0.0 — 2026-10-20
 
 ReachLog 1.0.0 focuses on **AI automation**: understanding replies, preparing

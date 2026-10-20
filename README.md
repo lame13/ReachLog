@@ -15,7 +15,7 @@ sending are optional and off by default.
 - **Inbound lead capture:** turn unmatched business mail into contacts and targets.
 - **Human review:** inspect uncertain suggestions before applying them.
 
-![AI review with inbound leads, follow-up drafts, and reply assessments using sample data](https://raw.githubusercontent.com/lame13/ReachLog/master/docs/images/ai-review.png)
+![AI review with inbound leads, follow-up drafts, and reply assessments using sample data](https://cdn.jsdelivr.net/npm/reachlog@1.0.0/docs/images/ai-review.png)
 
 ## Try the demo
 
@@ -93,7 +93,7 @@ AI automation handles those routine steps alongside accounts, contacts,
 conversation history, and follow-ups. You can also manage everything manually
 with AI disabled.
 
-![A sample conversation with an AI assessment, supporting quotes, and a suggested pipeline stage](https://raw.githubusercontent.com/lame13/ReachLog/master/docs/images/ai-assessment.png)
+![A sample conversation with an AI assessment, supporting quotes, and a suggested pipeline stage](https://cdn.jsdelivr.net/npm/reachlog@1.0.0/docs/images/ai-assessment.png)
 
 ## Accounts, contacts and the pipeline
 
