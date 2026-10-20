@@ -1,14 +1,21 @@
 # ReachLog
 
-Keep track of who you contacted, what you sent, who replied and when to follow
-up — and where each company stands, from first contact to a signed job.
+**Self-hosted AI automation for managing business conversations.** ReachLog
+triages replies, drafts the next follow-up, captures inbound leads, and updates
+your pipeline when the evidence is strong. Review suggestions in one place and
+choose how much to automate.
 
-ReachLog is a self-hosted app for one person. It runs on your machine, opens in
-your browser and stores its data in SQLite. You can use it without connecting an
-email account. Accounts, contacts and a pipeline keep the people and companies
-behind your outreach together.
+Bring your own OpenAI-compatible provider, including a local model server.
+ReachLog runs on your machine, opens in your browser, and stores its data in
+SQLite. It is free, open source, and built for one person. AI and automatic
+sending are optional and off by default.
 
-![The targets list, with status and source filters](https://raw.githubusercontent.com/lame13/ReachLog/master/docs/images/targets.png)
+- **Reply triage:** identify intent, requests, and commitments with supporting quotes.
+- **Follow-up drafting:** prepare the next step using recent conversation history.
+- **Inbound lead capture:** turn unmatched business mail into contacts and targets.
+- **Human review:** inspect uncertain suggestions before applying them.
+
+![AI review with inbound leads, follow-up drafts, and reply assessments using sample data](https://raw.githubusercontent.com/lame13/ReachLog/master/docs/images/ai-review.png)
 
 ## Try the demo
 
@@ -23,36 +30,14 @@ its own database. Editing, sending, mailbox sync and notifications are disabled.
 The SQLite dependency may need a C++ build toolchain if a prebuilt binary is not
 available for your platform.
 
-## Publish the demo
-
-You can also host the sample data as a public, read-only demo. Visitors can
-browse and export it, but cannot save changes, import data or send messages.
-Mailbox sync, Telegram and email verification stay off.
-
-After installing ReachLog globally, run it behind an HTTPS reverse proxy:
-
-```sh
-REACHLOG_DEMO_PUBLIC=true APP_URL=https://reachlog-demo.example.com \
-  reachlog demo --host 127.0.0.1 --port 3001 --data-dir /var/lib/reachlog-demo
-```
-
-`REACHLOG_DEMO_PUBLIC=true` is what allows the app to answer a public address
-without basic auth. Without it, a non-local address still requires
-`APP_BASIC_AUTH_*`, exactly as it does for a private installation. Keep the
-process on the loopback address. The package includes example configuration:
-`deploy/systemd/reachlog-demo.service`, `deploy/reachlog-demo.env.example`,
-`deploy/caddy/demo.Caddyfile.example` and `deploy/nginx/reachlog-demo.conf`.
-The systemd example assumes a source checkout built with
-`npm ci && npm run build` in `/opt/reachlog`, a `reachlog` system user and a
-configuration file at `/etc/reachlog-demo.env`.
-
-## Start tracking your outreach
+## Start using ReachLog
 
 ```sh
 npx reachlog
 ```
 
-Open <http://127.0.0.1:3000>. Add a target or import a CSV. The app starts empty; email and notifications are off by default.
+Open <http://127.0.0.1:3000>. The app starts empty. Add your contacts and targets
+or import a CSV, then configure AI automation below.
 
 For a persistent installation:
 
@@ -65,22 +50,55 @@ ReachLog prints the address to open and where its database lives. Press Ctrl+C t
 stop it. If a port is already busy it says so and suggests another one instead of
 failing with a stack trace.
 
+## AI automation
+
+ReachLog can automate three jobs without tying you to one vendor:
+
+- **Reply triage** reads the latest inbound message, extracts the ask and any commitment, suggests a pipeline stage with quoted evidence, and saves a reply draft or schedules a follow-up.
+- **Follow-up autopilot** writes the next email using recent thread history. It can stop at a reviewable draft, or send inside an existing thread within a daily cap.
+- **Inbound lead capture** classifies mail that did not match a target, extracts the company and need, and either creates a target or puts the lead in **AI review**.
+
+1. Open **Settings → Connections → AI automation**. Set an OpenAI-compatible
+   base URL (including `/v1` where required), API key, and exact model name, then
+   test and enable the connection. Local providers can leave the key blank.
+2. Connect IMAP and enable **Mailbox sync** under **Settings → Background tasks**
+   to bring in new replies and unmatched mail.
+3. Enable **AI automation** under **Settings → Background tasks**. Start with
+   drafts and review suggestions on the **AI review** page.
+
+The provider must support chat completions and return the requested JSON.
+You can configure a hosted endpoint or a local server such as Ollama or LM Studio
+with a compatible model. Provider and model capabilities vary; use the connection
+test before enabling automation.
+
+AI runs in the background every five minutes by default while ReachLog is
+running. It never auto-marks a target Won or overwrites a stage you changed
+manually in the previous seven days. Suggestions that need a decision go to
+**AI review**. High-confidence explicit opt-outs block sending.
+
+Auto-send is off by default. When enabled, it applies only to a follow-up inside an existing thread, only when no newer reply exists, only within the daily limit, and only while the target passes the normal do-not-contact, bounce, and email-verification guards. Cold outreach is never sent automatically.
+
+Email content used for triage, drafting, or lead extraction is sent to your
+configured provider. A hosted provider receives that content; a local endpoint
+can keep processing on your machine. API keys saved through Settings are stored
+in `connections.json` with owner-only permissions and are not returned to the browser.
+
+For external scheduling, run the AI worker once with `reachlog worker ai`.
+
 ## When ReachLog is useful
 
-If your outreach spreadsheet is getting hard to keep up with, ReachLog brings
-contacts, conversation history and follow-ups into one place. Each target can
-include the post or website where you found it. Connect email when you want
-replies and sent messages to appear automatically, or keep recording outreach
-by hand.
+Use ReachLog when keeping up with business conversations means repeatedly
+reading replies, deciding what happens next, and copying leads into a tracker.
+AI automation handles those routine steps alongside accounts, contacts,
+conversation history, and follow-ups. You can also manage everything manually
+with AI disabled.
 
-ReachLog is free, open source and built for one person managing their own outreach.
-
-![Analytics by source, with daily outreach, replies and follow-ups](https://raw.githubusercontent.com/lame13/ReachLog/master/docs/images/analytics.png)
+![A sample conversation with an AI assessment, supporting quotes, and a suggested pipeline stage](https://raw.githubusercontent.com/lame13/ReachLog/master/docs/images/ai-assessment.png)
 
 ## Accounts, contacts and the pipeline
 
 Open **Pipeline** to see your targets grouped by stage. Move a card when its
-stage changes; mail sync does not move it for you. Moving a card updates the outreach status, records the change on the
+stage changes; enabled AI triage can also advance it after a reply. Moving a card updates the outreach status, records the change on the
 timeline, and cancels open follow-ups when you close something as Lost. **New
 target** and the CSV import put companies on the board for you.
 
@@ -97,11 +115,12 @@ the stages do not cover.
 
 ## What it does
 
+- Automate reply triage, follow-up drafting, and inbound lead capture with your chosen AI provider.
+- Review AI suggestions, supporting quotes, and drafts before applying uncertain decisions.
 - Track companies as **accounts**, with the contacts, targets and notes that belong to each one.
 - Track people as **contacts**, with a title, phone, tags, links and their own history.
 - Move each target through a **pipeline**: New, Contacted, Replied, In conversation, Qualified, Won or Lost.
 - Track outreach history and do-not-contact records.
-- Triage replies, draft follow-ups, and capture unlinked leads with an OpenAI-compatible AI provider.
 - Import CSV files with a duplicate check before changes are made.
 - Save email drafts and schedule manual follow-ups.
 - Reuse email templates with contact variables, previews, and editable messages.
@@ -113,7 +132,8 @@ the stages do not cover.
 - Optionally verify addresses with EmailListVerify and receive Telegram notifications.
 - Back up SQLite without stopping the app.
 
-ReachLog does not send campaigns automatically. It has no team accounts, hosted service or registration flow.
+Optional auto-send is limited to follow-ups in existing threads. ReachLog has no
+bulk campaign sender, team accounts, hosted service, or registration flow.
 
 ## Your data
 
@@ -145,6 +165,7 @@ Run a worker once:
 
 ```sh
 reachlog worker mail-sync
+reachlog worker ai
 reachlog worker followup-check
 reachlog worker backup
 ```
@@ -159,28 +180,35 @@ Open **Templates** to create, edit, or delete a reusable subject and body. Suppo
 
 In the email composer, choose a template to preview it for the current contact. **Use template** replaces the subject and body; **Undo template** restores the previous text. Edit the result before sending. Missing values remain visible and block sending until replaced; unfinished messages can still be saved as drafts. Deleting a template does not change saved drafts or sent messages.
 
-## AI automation
-
-ReachLog can automate three jobs without tying you to one vendor:
-
-- **Reply triage** reads the latest inbound message, extracts the ask and any commitment, suggests a pipeline stage with quoted evidence, and writes the next follow-up with a reply draft.
-- **Follow-up autopilot** writes the next email from the whole thread instead of a template. It can stop at a reviewable draft, or send inside an existing thread within a daily cap.
-- **Inbound lead capture** classifies mail that did not match a target, extracts the company and need, and either creates a target or puts the lead in **AI review**.
-
-Open **Settings → Connections → AI automation**. Any endpoint that implements `POST /v1/chat/completions` works: OpenAI, DeepSeek, MiMo, OpenRouter, Ollama, LM Studio, or a gateway such as LiteLLM for Claude. Set the base URL, API key, and exact model name, then test the connection.
-
-AI runs are asynchronous. Enable **AI automation** under **Settings → Background tasks**; the worker runs every five minutes by default. It never auto-marks a target Won, never overwrites a stage you changed manually in the previous seven days, and keeps confident but ambiguous decisions in **AI review**. Explicit opt-out language blocks sending.
-
-Auto-send is off by default. When enabled, it applies only to a follow-up inside an existing thread, only when no newer reply exists, only within the daily limit, and only while the target passes the normal do-not-contact, bounce, and email-verification guards. Cold outreach is never sent automatically.
-
-Email content sent for triage, drafting, or lead extraction leaves your machine and goes to the provider you configure. The API key is stored in `connections.json` with owner-only permissions and is not returned to the browser.
-
 ## Network access
 
 The default listener is `127.0.0.1`. To use a network address, configure Basic Auth first. For internet access, place ReachLog behind an HTTPS reverse proxy and keep the application listener on localhost.
 
 Keep your real contact database private. The optional public demo uses separate
 sample data and blocks changes.
+
+## Publish the demo
+
+You can also host the sample data as a public, read-only demo. Visitors can
+browse and export it, but cannot save changes, import data or send messages.
+Mailbox sync, Telegram and email verification stay off.
+
+After installing ReachLog globally, run it behind an HTTPS reverse proxy:
+
+```sh
+REACHLOG_DEMO_PUBLIC=true APP_URL=https://reachlog-demo.example.com \
+  reachlog demo --host 127.0.0.1 --port 3001 --data-dir /var/lib/reachlog-demo
+```
+
+`REACHLOG_DEMO_PUBLIC=true` is what allows the app to answer a public address
+without basic auth. Without it, a non-local address still requires
+`APP_BASIC_AUTH_*`, exactly as it does for a private installation. Keep the
+process on the loopback address. The package includes example configuration:
+`deploy/systemd/reachlog-demo.service`, `deploy/reachlog-demo.env.example`,
+`deploy/caddy/demo.Caddyfile.example` and `deploy/nginx/reachlog-demo.conf`.
+The systemd example assumes a source checkout built with
+`npm ci && npm run build` in `/opt/reachlog`, a `reachlog` system user and a
+configuration file at `/etc/reachlog-demo.env`.
 
 ## From source
 

@@ -59,7 +59,7 @@
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   },
-  "description": "A local outreach tracker for contacts, replies and follow-ups, with optional SMTP and IMAP.",
+  "description": "Self-hosted AI automation for reply triage, follow-up drafting, inbound lead capture, and pipeline tracking.",
   "license": "MIT",
   "author": "Niko",
   "repository": {
@@ -87,7 +87,9 @@
     "node": "^22.0.0 || ^24.0.0"
   },
   "keywords": [
-    "outreach",
+    "ai",
+    "automation",
+    "ai-automation",
     "crm",
     "follow-ups",
     "sqlite",

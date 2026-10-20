@@ -26,6 +26,7 @@ async function main() {
     `ai: triaged=${summary.triaged} drafts=${summary.followupsDrafted} sent=${summary.followupsSent} leads=${summary.leadsCaptured} errors=${summary.errors.length}`
   );
   for (const error of summary.errors.slice(0, 5)) console.error(error);
+  if (summary.errors.length) process.exitCode = 1;
 }
 
 main().catch(async (error) => {

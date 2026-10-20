@@ -2,6 +2,10 @@
 
 ## 1.0.0 — 2026-10-20
 
+ReachLog 1.0.0 focuses on **AI automation**: understanding replies, preparing
+follow-ups, capturing inbound leads, and keeping the pipeline current. Bring
+your own compatible provider and review suggestions before enabling more automation.
+
 ### Added
 
 - **AI automation** through any OpenAI-compatible chat completions endpoint.
@@ -10,8 +14,8 @@
   client. Claude can be reached through an OpenAI-compatible gateway.
 - **Reply triage** classifies each new inbound message, extracts asks and
   commitments with quoted evidence, moves the pipeline forward at high
-  confidence, and creates the next follow-up with a reply draft.
-- **Follow-up autopilot** writes the next email from the full thread and saves
+  confidence, and saves a reply draft or schedules the next follow-up.
+- **Follow-up autopilot** writes the next email from recent thread history and saves
   it on the due follow-up. Optional auto-send is limited to existing threads,
   has a daily cap, and respects every existing send guard.
 - **Unlinked lead capture** turns inbound business mail that did not match a
@@ -29,6 +33,22 @@
 - SMTP sending moved into a shared module so the web app and the AI worker use
   the same guards, idempotency keys, and persistence path.
 - Unlinked mail events now retain a reply snippet for AI classification.
+- The npm README, package description, and CLI introduction lead with AI
+  automation, with setup instructions for provider connections and background tasks.
+- New sample-data screenshots show the AI review queue and conversation
+  assessments, replacing the earlier targets and analytics screenshots.
+
+### Fixed
+
+- AI review items and target assessments now load their stored results correctly;
+  accepting suggestions works, and cached results avoid repeat provider requests.
+- Follow-up automation rechecks the task and conversation after drafting, so a
+  new reply, cancellation, reschedule, or pipeline change prevents a stale send.
+  Closed targets are excluded and edits to draft subjects are respected.
+- Interrupted AI runs are retried on the next worker run. Provider failures now
+  produce a failed worker exit status so background scheduling reports them.
+- Provider error messages remain readable when no API key is configured, while
+  configured keys stay redacted.
 
 ### Upgrade
 

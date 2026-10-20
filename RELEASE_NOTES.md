@@ -1,9 +1,8 @@
 # ReachLog 1.0.0
 
-ReachLog now runs three AI jobs against the mailbox and pipeline it already
-tracks. It is not a chat box bolted onto the composer. The worker reads new
-replies, changes state when the evidence is strong, writes the next follow-up
-from the actual thread, and captures inbound mail that never matched a target.
+ReachLog 1.0.0 brings self-hosted AI automation to business conversations. The
+worker reads new replies, advances the pipeline when the evidence is strong,
+drafts the next follow-up, and captures inbound leads that never matched a target.
 
 ## Bring your own provider
 
@@ -23,11 +22,11 @@ quotes, then:
 
 - moves the pipeline forward at high confidence;
 - records the suggested stage even when it does not apply it;
-- creates the next follow-up with a reply draft;
+- saves a reply draft or schedules the next follow-up;
 - sends ambiguous or negative replies to **AI review**.
 
 It never auto-marks Won. It does not overwrite a stage changed by hand in the
-previous seven days. Explicit opt-out language blocks future sending.
+previous seven days. High-confidence explicit opt-outs block future sending.
 
 ## Follow-up autopilot
 
@@ -44,10 +43,15 @@ outreach is never sent automatically.
 
 Mail that does not match a target is no longer only an event row. The worker
 classifies it, extracts the company, person, need, budget, and timeline, and
-creates a target for a high-confidence business lead. Everything else goes to
-**AI review** with the source message attached.
+creates a target for a high-confidence business lead. Uncertain leads go to
+**AI review** with the sender, subject, and assessment. Non-lead mail is ignored.
 
 ## Upgrade
+
+This release also fixes AI review loading and acceptance, cached-result reuse,
+stale follow-up sends after a conversation changes, interrupted worker recovery,
+and failure reporting. The npm README now leads with AI automation and fresh
+screenshots of the review queue and conversation assessments.
 
 ```sh
 npm install --global reachlog@1.0.0

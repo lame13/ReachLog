@@ -8,7 +8,7 @@ import { parseArgs } from "node:util";
 import { config as loadEnv } from "dotenv";
 import { verifyBackupFile } from "./modules/core/db/verify-backup";
 
-const usage = `ReachLog — keep track of outreach, replies and follow-ups.
+const usage = `ReachLog — self-hosted AI automation for business conversations.
 
 Usage:
   reachlog [start] [options]

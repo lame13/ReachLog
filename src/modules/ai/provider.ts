@@ -138,9 +138,10 @@ async function postCompletion({
   }
 
   if (!response.ok) {
-    const providerMessage = readProviderError(payload)
-      .replaceAll(config.apiKey ?? "", "[redacted]")
-      .slice(0, 300);
+    const error = readProviderError(payload);
+    const providerMessage = (config.apiKey
+      ? error.replaceAll(config.apiKey, "[redacted]")
+      : error).slice(0, 300);
     return {
       ok: false,
       status: response.status,

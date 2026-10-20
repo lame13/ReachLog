@@ -1,5 +1,5 @@
 import { getSqlite } from "@/modules/core/db/client";
-import type { AiRunRow } from "./client";
+import { AI_RUN_COLUMNS, type AiRunRow } from "./client";
 import {
   followupDraftSchema,
   replyTriageSchema,
@@ -40,7 +40,7 @@ export function getPendingAiReviews(limit = 50): AiReviewItem[] {
   const rows = getSqlite()
     .prepare(
       `
-      SELECT * FROM ai_runs
+      SELECT ${AI_RUN_COLUMNS} FROM ai_runs
       WHERE review_status = 'pending'
         AND status = 'success'
       ORDER BY created_at DESC
@@ -110,7 +110,7 @@ export function getPendingAiReviewCount() {
 export function getLatestTargetAiReview(targetId: string) {
   const run = getSqlite()
     .prepare(
-      "SELECT * FROM ai_runs WHERE target_id = ? AND kind = 'reply_triage' AND status = 'success' ORDER BY created_at DESC LIMIT 1"
+      `SELECT ${AI_RUN_COLUMNS} FROM ai_runs WHERE target_id = ? AND kind = 'reply_triage' AND status = 'success' ORDER BY created_at DESC LIMIT 1`
     )
     .get(targetId) as AiRunRow | undefined;
   if (!run) return null;

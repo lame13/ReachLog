@@ -36,6 +36,15 @@ export type AiRunRow = {
   updatedAt: string;
 };
 
+export const AI_RUN_COLUMNS = `
+  id, kind, entity_type AS entityType, entity_id AS entityId,
+  target_id AS targetId, input_hash AS inputHash, prompt_version AS promptVersion,
+  model, status, review_status AS reviewStatus, output_json AS outputJson, error,
+  prompt_tokens AS promptTokens, completion_tokens AS completionTokens, attempts,
+  applied_at AS appliedAt, reviewed_at AS reviewedAt,
+  created_at AS createdAt, updated_at AS updatedAt
+`;
+
 export function aiConfig(): AiProviderConfig | null {
   if (!env.AI_ENABLED) return null;
   const baseUrl = env.AI_BASE_URL?.trim();
@@ -94,7 +103,7 @@ export async function runAiJson<S extends z.ZodTypeAny>({
   const now = new Date().toISOString();
   const existing = sqlite
     .prepare(
-      "SELECT * FROM ai_runs WHERE kind = ? AND entity_id = ? AND input_hash = ?"
+      "SELECT id, output_json AS outputJson, status FROM ai_runs WHERE kind = ? AND entity_id = ? AND input_hash = ?"
     )
     .get(kind, entityId, hash) as
     | {
@@ -220,7 +229,7 @@ export async function runAiJson<S extends z.ZodTypeAny>({
 
 export function getAiRun(runId: string) {
   return getSqlite()
-    .prepare("SELECT * FROM ai_runs WHERE id = ?")
+    .prepare(`SELECT ${AI_RUN_COLUMNS} FROM ai_runs WHERE id = ?`)
     .get(runId) as AiRunRow | undefined;
 }
 

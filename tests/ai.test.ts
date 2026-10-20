@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import net, { type Socket } from "node:net";
 import Database from "better-sqlite3";
+import { spawnSync } from "node:child_process";
 
 function form(values: Record<string, string>) {
   const result = new FormData();
@@ -152,6 +153,19 @@ test("the OpenAI-compatible client retries without response_format", async () =>
   assert.equal(result.promptTokens, 3);
 });
 
+test("AI provider errors stay readable without a key and redact configured keys", async () => {
+  const { requestChatCompletion } = await import("../src/modules/ai/provider");
+  for (const apiKey of [undefined, "secret-key"]) {
+    await assert.rejects(requestChatCompletion({
+      config: { baseUrl: "http://127.0.0.1:9999/v1", model: "test", apiKey },
+      messages: [{ role: "user", content: "hello" }],
+      request: async () => new Response(JSON.stringify({
+        error: { message: apiKey ? `Invalid key ${apiKey}` : "Model unavailable" }
+      }), { status: 401 })
+    }), { message: apiKey ? "AI provider returned 401: Invalid key [redacted]" : "AI provider returned 401: Model unavailable" });
+  }
+});
+
 test("AI automation triages replies, drafts follow-ups and captures unlinked leads", async (t) => {
   const directory = mkdtempSync(path.join(tmpdir(), "reachlog-ai-"));
   for (const key of Object.keys(process.env))
@@ -172,6 +186,10 @@ test("AI automation triages replies, drafts follow-ups and captures unlinked lea
   const { triageReplyMessage } = await import("../src/modules/ai/triage");
   const { draftDueFollowups } = await import("../src/modules/ai/followup");
   const { processUnlinkedMail } = await import("../src/modules/ai/unlinked");
+  const { getAiRun, runAiJson } = await import("../src/modules/ai/client");
+  const { getLatestTargetAiReview, getPendingAiReviews } = await import("../src/modules/ai/review");
+  const { acceptAiSuggestionAction } = await import("../src/modules/ai/actions");
+  const { followupDraftSchema } = await import("../src/modules/ai/schemas");
   const sqlite = getSqlite();
 
   t.after(() => {
@@ -270,7 +288,7 @@ test("AI automation triages replies, drafts follow-ups and captures unlinked lea
     )
     .run(now, now);
 
-  await t.test("reply triage moves the stage and creates a drafted follow-up", async () => {
+  await t.test("reply triage moves the stage and saves a reply draft", async () => {
     const result = await triageReplyMessage("m1", aiFetch);
     assert.equal(result?.output.intent, "interested");
     assert.equal(result?.stageApplied, true);
@@ -293,6 +311,28 @@ test("AI automation triages replies, drafts follow-ups and captures unlinked lea
         .get() as { n: number }).n,
       1
     );
+    assert.equal(getAiRun(result!.run.id)?.entityId, "m1");
+    assert.equal(getLatestTargetAiReview("t1")?.output.intent, "interested");
+  });
+
+  await t.test("successful AI results are reused without another provider request", async () => {
+    const args = {
+      kind: "followup_draft" as const,
+      entityType: "followup",
+      entityId: "cached-followup",
+      input: { test: "cache" },
+      schema: followupDraftSchema,
+      system: "Return JSON.",
+      user: "TASK: followup_draft"
+    };
+    const first = await runAiJson({ ...args, request: aiFetch });
+    const cached = await runAiJson({
+      ...args,
+      request: async () => { throw new Error("Cached result must not call the provider"); }
+    });
+    assert.equal(cached.run.id, first.run.id);
+    assert.equal(cached.run.attempts, 1);
+    assert.deepEqual(cached.output, first.output);
   });
 
   await t.test("a due follow-up gets a thread-aware draft without sending", async () => {
@@ -333,6 +373,9 @@ test("AI automation triages replies, drafts follow-ups and captures unlinked lea
       (sqlite.prepare("SELECT COUNT(*) as n FROM outbound_sends").get() as { n: number }).n,
       0
     );
+    const review = getPendingAiReviews().find((item) => item.run.entityId === "f1");
+    assert.equal(review?.kind, "followup_draft");
+    assert.equal(review?.run.targetId, "t2");
   });
 
   await t.test("an unlinked business email becomes a target", async () => {
@@ -405,6 +448,16 @@ test("AI automation triages replies, drafts follow-ups and captures unlinked lea
         .get(),
       undefined
     );
+    const review = getPendingAiReviews().find((item) => item.run.entityId === "e2");
+    assert.equal(review?.kind, "unlinked_lead");
+    // The mock lead points at an existing contact; accepting must still resolve
+    // the pending review instead of silently doing nothing.
+    assert.ok(review);
+    await assert.rejects(
+      acceptAiSuggestionAction(form({ runId: review.run.id })),
+      /static generation store missing in revalidatePath/
+    );
+    assert.equal(getAiRun(review.run.id)?.reviewStatus, "applied");
   });
 
   await t.test("auto-send uses the existing SMTP path and daily guard", async () => {
@@ -539,6 +592,31 @@ test("AI automation triages replies, drafts follow-ups and captures unlinked lea
           .get(),
         0
       );
+
+      for (const change of ["reply", "cancel", "reschedule", "won", "subject"] as const) {
+        const targetId = `t-race-${change}`;
+        const threadId = `th-race-${change}`;
+        const followupId = `f-race-${change}`;
+        sqlite.prepare("INSERT INTO targets (id,contact_id,company_name,source_type,dedupe_key,status,stage,created_at,updated_at) VALUES (?,'c1','Changed conversation','manual',?,'waiting','contacted',?,?)")
+          .run(targetId, targetId, now, now);
+        sqlite.prepare("INSERT INTO threads (id,target_id,contact_id,mailbox,subject,normalized_subject,status,last_outbound_at,created_at,updated_at) VALUES (?,?,'c1','Sent','Question','question','waiting',?,?,?)")
+          .run(threadId, targetId, yesterday, yesterday, yesterday);
+        sqlite.prepare("INSERT INTO messages (id,thread_id,direction,from_email,to_email,subject,body_text,message_id,sent_at,created_at) VALUES (?,?,'outbound','owner@example.com','alex@acme.example','Question','Original message',?,?,?)")
+          .run(`m-${change}`, threadId, `<race-${change}@example.com>`, yesterday, yesterday);
+        sqlite.prepare("INSERT INTO followup_tasks (id,thread_id,target_id,due_at,status,created_at) VALUES (?,?,?,?,'open',?)")
+          .run(followupId, threadId, targetId, yesterday, now);
+        const results = await draftDueFollowups(async (url, init) => {
+          if (change === "reply") sqlite.prepare("UPDATE threads SET last_inbound_at = ? WHERE id = ?").run(now, threadId);
+          if (change === "cancel") sqlite.prepare("UPDATE followup_tasks SET status = 'cancelled' WHERE id = ?").run(followupId);
+          if (change === "reschedule") sqlite.prepare("UPDATE followup_tasks SET due_at = ? WHERE id = ?").run(new Date(Date.now() + 86_400_000).toISOString(), followupId);
+          if (change === "won") sqlite.prepare("UPDATE targets SET stage = 'won' WHERE id = ?").run(targetId);
+          if (change === "subject") sqlite.prepare("INSERT INTO email_drafts (target_id,subject,body,from_email,updated_at) VALUES (?,'My edited subject',?,'owner@example.com',?)")
+            .run(targetId, "I can send the cutover checklist and a short estimate. Which part is blocking the decision?", now);
+          return aiFetch(url, init);
+        });
+        assert.equal(results.find((result) => result.followupId === followupId)?.sent, false, change);
+        assert.equal(sqlite.prepare("SELECT COUNT(*) FROM outbound_sends WHERE send_key = ?").pluck().get(`ai-followup:${followupId}`), 0, change);
+      }
     } finally {
       connections.saveConnection(
         "ai",
@@ -552,5 +630,21 @@ test("AI automation triages replies, drafts follow-ups and captures unlinked lea
       );
       await smtp.close();
     }
+  });
+
+  await t.test("the worker retries interrupted AI runs and reports provider failures", async () => {
+    const { runAiAutomation } = await import("../src/modules/ai/worker");
+    sqlite.prepare("UPDATE ai_runs SET status = 'running' WHERE kind = 'unlinked_lead' AND entity_id = 'e2'").run();
+    await runAiAutomation(aiFetch);
+    assert.equal(sqlite.prepare("SELECT status FROM ai_runs WHERE kind = 'unlinked_lead' AND entity_id = 'e2'").pluck().get(), "success");
+
+    sqlite.prepare("UPDATE ai_runs SET status = 'failed' WHERE kind = 'unlinked_lead' AND entity_id = 'e2'").run();
+    const result = spawnSync(process.execPath, ["--import", "tsx", "workers/ai.ts"], {
+      env: { ...process.env, AI_BASE_URL: "http://127.0.0.1:1/v1" },
+      encoding: "utf8",
+      timeout: 10_000
+    });
+    assert.equal(result.status, 1, result.stderr);
+    assert.match(result.stdout, /errors=[1-9]/);
   });
 });

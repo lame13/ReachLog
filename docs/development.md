@@ -63,15 +63,15 @@ The browser script owns its test database, local SMTP fixture, application proce
 
 Update `package.json`, both root version fields in `npm-shrinkwrap.json`, `CHANGELOG.md`, and `RELEASE_NOTES.md`. Run the checks and install and exercise the resulting archive outside the checkout. Review and commit the release files, including any README images.
 
-For 0.4.0, after committing on `master`:
+For 1.0.0, after committing on `master`:
 
 ```sh
 nvm use
-git tag -a 0.4.0 -m "ReachLog 0.4.0"
+git tag -a 1.0.0 -m "ReachLog 1.0.0"
 git push origin master
-git push origin 0.4.0
+git push origin 1.0.0
 npm publish --access public
-gh release create 0.4.0 --verify-tag --title "ReachLog 0.4.0" --notes-file RELEASE_NOTES.md
+gh release create 1.0.0 --verify-tag --title "ReachLog 1.0.0" --notes-file RELEASE_NOTES.md
 ```
 
 Sign in with `npm login` and `gh auth login` if needed. Tags use the version

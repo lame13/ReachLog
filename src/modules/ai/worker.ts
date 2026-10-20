@@ -26,6 +26,12 @@ export async function runAiAutomation(
 
   if (!aiReady()) return summary;
 
+  // The caller holds the AI worker lock, so these belong to an interrupted run.
+  getSqlite().prepare(`
+    UPDATE ai_runs SET status = 'failed', error = 'AI worker was interrupted.', updated_at = ?
+    WHERE status = 'running'
+  `).run(new Date().toISOString());
+
   for (const messageId of replyTriageCandidates(limit)) {
     try {
       const result = await triageReplyMessage(messageId, request);

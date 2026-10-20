@@ -53,6 +53,7 @@ export async function draftDueFollowups(
       LEFT JOIN contacts ON contacts.id = targets.contact_id
       WHERE followup_tasks.status = 'open'
         AND followup_tasks.due_at <= ?
+        AND targets.stage NOT IN ('won', 'lost')
         AND NOT EXISTS (
           SELECT 1 FROM ai_runs
           WHERE ai_runs.kind = 'followup_draft'
@@ -171,6 +172,37 @@ async function draftOneFollowup(
     request
   });
 
+  // The provider request yields to mailbox sync and operator actions. Discard
+  // this suggestion if the task or conversation changed while it was running.
+  const current = sqlite.prepare(`
+    SELECT followup_tasks.status, followup_tasks.due_at AS dueAt,
+      targets.stage, contacts.email AS contactEmail,
+      threads.last_inbound_at AS lastInboundAt,
+      threads.last_outbound_at AS lastOutboundAt
+    FROM followup_tasks
+    INNER JOIN targets ON targets.id = followup_tasks.target_id
+    INNER JOIN threads ON threads.id = followup_tasks.thread_id
+    LEFT JOIN contacts ON contacts.id = targets.contact_id
+    WHERE followup_tasks.id = ?
+  `).get(row.id) as {
+    status: string;
+    dueAt: string;
+    stage: string;
+    contactEmail: string | null;
+    lastInboundAt: string | null;
+    lastOutboundAt: string | null;
+  } | undefined;
+  if (!current || current.status !== "open" ||
+    current.dueAt !== row.dueAt || current.stage !== row.stage ||
+    current.contactEmail !== row.contactEmail ||
+    current.lastInboundAt !== row.lastInboundAt ||
+    current.lastOutboundAt !== row.lastOutboundAt) {
+    // Leave it retryable so an open, rescheduled task can get a fresh draft.
+    sqlite.prepare("UPDATE ai_runs SET status = 'failed', review_status = 'none', error = ? WHERE id = ?")
+      .run("The task or conversation changed during drafting. Retry with current context.", run.id);
+    return { followupId: row.id, drafted: false, sent: false };
+  }
+
   sqlite
     .prepare(
       "UPDATE followup_tasks SET suggested_subject = ?, suggested_body = ? WHERE id = ?"
@@ -186,7 +218,8 @@ async function draftOneFollowup(
 
   const blocked = isTargetActionBlocked(row);
   const existingDraft = getEmailDraft(row.targetId);
-  const draftInProgress = Boolean(existingDraft && existingDraft.body !== output.body);
+  const draftInProgress = Boolean(existingDraft &&
+    (existingDraft.subject !== output.subject || existingDraft.body !== output.body));
   const autoReplyRecent = recentAutoReply(row.targetId);
   const canAutoSend =
     env.AI_AUTO_SEND &&

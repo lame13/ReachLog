@@ -5,7 +5,7 @@ const result = spawnSync(command, ['pack', '--dry-run', '--json', '--ignore-scri
 if (result.status !== 0) throw new Error(result.stderr || 'Could not inspect package.');
 const [pack] = JSON.parse(result.stdout);
 const files = pack.files.map((file) => file.path);
-for (const file of ['dist/cli.cjs', 'dist/app/.next/BUILD_ID', 'dist/workers/backup.cjs', 'dist/workers/scheduler.cjs', 'LICENSE', 'README.md', 'CHANGELOG.md', 'npm-shrinkwrap.json']) {
+for (const file of ['dist/cli.cjs', 'dist/app/.next/BUILD_ID', 'dist/workers/backup.cjs', 'dist/workers/scheduler.cjs', 'dist/workers/ai.cjs', 'LICENSE', 'README.md', 'CHANGELOG.md', 'npm-shrinkwrap.json']) {
   if (!files.includes(file) || !existsSync(file)) throw new Error(`Missing release file: ${file}`);
 }
 const forbidden = files.filter((file) => /(^|\/)(node_modules|cache|\.git|\.data)\/|\.sqlite($|[.-])|\.db$|\.node$|\.tsbuildinfo$|\.map$|(^|\/)\.env($|\.)|(^|\/)(demo-)?connections\.json$/.test(file));
