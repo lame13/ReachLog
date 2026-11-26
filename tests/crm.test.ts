@@ -557,12 +557,12 @@ test("0.4.0 accounts, contacts and pipeline", async (t) => {
     assert.deepEqual(lostTargets.map((row) => row.id), ["t-acme"]);
   });
 
-  await t.test("the schema reports migration 0009", () => {
+  await t.test("the schema reports the latest migration", () => {
     assert.equal(
       (sqlite
         .prepare("SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1")
         .get() as { version: string }).version,
-      "0009"
+      "0010"
     );
   });
 

@@ -75,6 +75,7 @@ const EnvSchema = z.object({
   AI_MODEL: z.string().default("gpt-4o-mini"),
   AI_AUTO_SEND: booleanFromString,
   AI_DAILY_SEND_LIMIT: portFromString(5),
+  STALE_DEAL_DAYS: portFromString(14),
 
   BACKUP_DIR: z.string().default(defaultBackupDir),
   B2_REMOTE: z.string().optional()

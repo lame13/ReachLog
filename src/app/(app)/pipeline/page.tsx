@@ -3,11 +3,16 @@ import { Search } from "lucide-react";
 import { ExportLinks } from "@/components/export-links";
 import { StageMoveForm } from "@/components/stage-move-form";
 import { StatusPill } from "@/components/status-pill";
-import { formatDateTime, timeAgo } from "@/modules/core/dates";
+import { formatDate, formatDateTime, timeAgo } from "@/modules/core/dates";
 import {
   getPipelineBoard,
   getPipelineSummary
 } from "@/modules/pipeline/queries";
+import {
+  formatMoney,
+  formatPipelineValue,
+  normalizeCurrency
+} from "@/modules/opportunities/value";
 
 type PageProps = {
   searchParams?: Promise<{
@@ -43,9 +48,20 @@ export default async function PipelinePage({ searchParams }: PageProps) {
 
       <div className="mb-4 grid gap-3 sm:grid-cols-3 xl:grid-cols-5">
         <SummaryTile label="Open" value={summary.open} />
-        <SummaryTile label="Won" tone="green" value={summary.won} />
-        <SummaryTile label="Lost" value={summary.lost} />
-        <SummaryTile label="Accounts" value={summary.accounts} />
+        <SummaryTile
+          label="Open value"
+          value={formatPipelineValue(summary.openValueByCurrency)}
+        />
+        <SummaryTile
+          label="Won value"
+          tone="green"
+          value={formatPipelineValue(summary.wonValueByCurrency)}
+        />
+        <SummaryTile
+          label="Missing next step"
+          tone={summary.missingNextSteps ? "amber" : "default"}
+          value={summary.missingNextSteps}
+        />
         <SummaryTile
           label="Follow-ups due"
           tone={summary.overdueFollowups ? "amber" : "default"}
@@ -148,6 +164,14 @@ export default async function PipelinePage({ searchParams }: PageProps) {
                           {card.contactName ? `${card.contactName} · ` : ""}
                           {card.contactEmail ?? "form only"}
                         </div>
+                        {card.valueCents !== null && (
+                          <div className="mt-2 text-sm font-medium">
+                            {formatMoney(
+                              card.valueCents,
+                              normalizeCurrency(card.currency)
+                            )}
+                          </div>
+                        )}
                         <div className="mt-2 flex flex-wrap items-center gap-2">
                           <StatusPill status={card.status} />
                           {card.doNotResend ? (
@@ -155,6 +179,35 @@ export default async function PipelinePage({ searchParams }: PageProps) {
                           ) : null}
                         </div>
                         <div className="mt-2 space-y-0.5 text-xs text-muted">
+                          {card.expectedCloseDate && column.kind === "open" && (
+                            <div>
+                              Target close {formatDate(card.expectedCloseDate)}
+                            </div>
+                          )}
+                          {card.closedAt && column.kind !== "open" && (
+                            <div>
+                              Closed {formatDate(card.closedAt)}
+                            </div>
+                          )}
+                          {column.kind === "open" && card.nextStep ? (
+                            <div
+                              className={
+                                card.nextStepAt &&
+                                card.nextStepAt <= new Date().toISOString()
+                                  ? "font-medium text-rose-700"
+                                  : undefined
+                              }
+                            >
+                              {card.nextStep}
+                              {card.nextStepAt
+                                ? ` · ${formatDate(card.nextStepAt)}`
+                                : ""}
+                            </div>
+                          ) : column.kind === "open" ? (
+                            <div className="font-medium text-amber-800">
+                              No next step
+                            </div>
+                          ) : null}
                           {card.nextFollowupAt && (
                             <div>Follow-up {formatDateTime(card.nextFollowupAt)}</div>
                           )}
@@ -186,7 +239,7 @@ function SummaryTile({
   tone = "default"
 }: {
   label: string;
-  value: number;
+  value: number | string;
   tone?: "default" | "green" | "amber";
 }) {
   const tones = {

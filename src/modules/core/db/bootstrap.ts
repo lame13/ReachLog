@@ -58,6 +58,13 @@ CREATE TABLE IF NOT EXISTS targets (
   dedupe_key TEXT NOT NULL,
   status TEXT NOT NULL,
   stage TEXT NOT NULL DEFAULT 'new',
+  value_cents INTEGER,
+  currency TEXT NOT NULL DEFAULT 'USD',
+  expected_close_date TEXT,
+  next_step TEXT,
+  next_step_at TEXT,
+  lost_reason TEXT,
+  closed_at TEXT,
   do_not_resend INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
@@ -259,6 +266,7 @@ export function bootstrapDatabase(sqlite: SqliteDatabase) {
   })();
 
   ensureAiAutomationSchema(sqlite);
+  ensureOpportunityColumns(sqlite);
   applyAccountsAndPipelineMigration(sqlite, upgradeToAccounts);
 
   const seeded = sqlite
@@ -298,6 +306,38 @@ function ensureMessageReadColumns(sqlite: SqliteDatabase) {
   if (!tableHasColumn(sqlite, "messages", "read_at")) {
     sqlite.exec("ALTER TABLE messages ADD COLUMN read_at TEXT");
   }
+}
+
+/**
+ * 0010 keeps the existing target as the opportunity record. These fields are
+ * intentionally optional: a person can track conversations without becoming a
+ * full-time CRM administrator.
+ */
+function ensureOpportunityColumns(sqlite: SqliteDatabase) {
+  const columns = [
+    ["value_cents", "INTEGER"],
+    ["currency", "TEXT NOT NULL DEFAULT 'USD'"],
+    ["expected_close_date", "TEXT"],
+    ["next_step", "TEXT"],
+    ["next_step_at", "TEXT"],
+    ["lost_reason", "TEXT"],
+    ["closed_at", "TEXT"]
+  ] as const;
+
+  for (const [column, definition] of columns) {
+    if (!tableHasColumn(sqlite, "targets", column)) {
+      sqlite.exec(
+        `ALTER TABLE targets ADD COLUMN ${column} ${definition}`
+      );
+    }
+  }
+
+  sqlite.exec(`
+    CREATE INDEX IF NOT EXISTS targets_stage_idx ON targets(stage);
+    CREATE INDEX IF NOT EXISTS targets_next_step_idx ON targets(next_step_at);
+    CREATE INDEX IF NOT EXISTS targets_expected_close_idx ON targets(expected_close_date);
+  `);
+  recordSchemaVersion(sqlite, "0010", "opportunity_value_and_next_step");
 }
 
 /**
@@ -524,11 +564,15 @@ function seedDatabase(sqlite: SqliteDatabase) {
   const insertTarget = sqlite.prepare(`
     INSERT INTO targets (
       id, contact_id, account_id, company_name, website_url, source_type,
-      source_url, dedupe_key, status, stage, do_not_resend, created_at, updated_at
+      source_url, dedupe_key, status, stage, value_cents, currency,
+      expected_close_date, next_step, next_step_at, lost_reason, closed_at,
+      do_not_resend, created_at, updated_at
     )
     VALUES (
       @id, @contactId, @accountId, @companyName, @websiteUrl, @sourceType,
-      @sourceUrl, @dedupeKey, @status, @stage, @doNotResend, @createdAt, @updatedAt
+      @sourceUrl, @dedupeKey, @status, @stage, @valueCents, @currency,
+      @expectedCloseDate, @nextStep, @nextStepAt, @lostReason, @closedAt,
+      @doNotResend, @createdAt, @updatedAt
     )
   `);
   const insertThread = sqlite.prepare(`
@@ -708,6 +752,13 @@ function seedDatabase(sqlite: SqliteDatabase) {
         dedupeKey: "email:alex@acme.example",
         status: "replied",
         stage: "replied",
+        valueCents: 600_000,
+        currency: "USD",
+        expectedCloseDate: iso(21).slice(0, 10),
+        nextStep: "Send the migration plan and two examples",
+        nextStepAt: iso(0, 14),
+        lostReason: null,
+        closedAt: null,
         doNotResend: 0
       },
       {
@@ -721,6 +772,13 @@ function seedDatabase(sqlite: SqliteDatabase) {
         dedupeKey: "domain:blue.example",
         status: "sent",
         stage: "contacted",
+        valueCents: 240_000,
+        currency: "USD",
+        expectedCloseDate: iso(38).slice(0, 10),
+        nextStep: "Send the checkout review outline",
+        nextStepAt: iso(1, 9),
+        lostReason: null,
+        closedAt: null,
         doNotResend: 0
       },
       {
@@ -734,6 +792,13 @@ function seedDatabase(sqlite: SqliteDatabase) {
         dedupeKey: "wporg:https://wordpress.org/support/topic/example",
         status: "follow-up due",
         stage: "contacted",
+        valueCents: 350_000,
+        currency: "USD",
+        expectedCloseDate: iso(45).slice(0, 10),
+        nextStep: "Follow up on the plugin support thread",
+        nextStepAt: iso(-1, 9),
+        lostReason: null,
+        closedAt: null,
         doNotResend: 0
       },
       {
@@ -747,6 +812,13 @@ function seedDatabase(sqlite: SqliteDatabase) {
         dedupeKey: "form:devdesk.example/contact",
         status: "follow-up due",
         stage: "new",
+        valueCents: 180_000,
+        currency: "USD",
+        expectedCloseDate: null,
+        nextStep: "Find a direct contact",
+        nextStepAt: iso(3, 9),
+        lostReason: null,
+        closedAt: null,
         doNotResend: 0
       },
       {
@@ -760,6 +832,13 @@ function seedDatabase(sqlite: SqliteDatabase) {
         dedupeKey: "email:priya@northwind.example",
         status: "replied",
         stage: "qualified",
+        valueCents: 1_200_000,
+        currency: "USD",
+        expectedCloseDate: iso(14).slice(0, 10),
+        nextStep: "Send a scoped proposal",
+        nextStepAt: iso(0, 16),
+        lostReason: null,
+        closedAt: null,
         doNotResend: 0
       },
       {
@@ -773,6 +852,13 @@ function seedDatabase(sqlite: SqliteDatabase) {
         dedupeKey: "email:sam@kite.example",
         status: "replied",
         stage: "won",
+        valueCents: 850_000,
+        currency: "USD",
+        expectedCloseDate: iso(-4).slice(0, 10),
+        nextStep: null,
+        nextStepAt: null,
+        lostReason: null,
+        closedAt: iso(-4, 11),
         doNotResend: 0
       }
     ].forEach((target) =>

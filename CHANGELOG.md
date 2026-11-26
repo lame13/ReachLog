@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.1.0 — 2026-11-26
+
+ReachLog 1.1.0 makes the pipeline operational. Each target now has a simple
+next step and optional commercial context, while Today combines the replies,
+deadlines and quiet opportunities that need a decision.
+
+### Added
+
+- **Today** brings replies, next steps, due follow-ups, stale opportunities,
+  AI review items and sending problems into one work queue.
+- Optional deal value and currency, expected close date, next step and due date,
+  lost reason, and close date for every opportunity.
+- Pipeline cards and summaries show open and won value, expected close dates,
+  next steps and missing-next-step counts.
+- Analytics now reports open and won value, win rate, average time to close, and
+  qualified and won counts by source.
+- Target CSV and JSON exports include the new opportunity fields.
+
+### Changed
+
+- The Dashboard navigation item is now **Today**; the existing dashboard URL is
+  unchanged.
+- Moving an opportunity to Won or Lost records its close date and closes any
+  open follow-ups. Reopening it clears the close date so it can be worked again.
+- Marking a follow-up queue item as lost now also closes the opportunity stage.
+
+### Upgrade
+
+- Migration 0010 adds the opportunity fields without changing existing records.
+- All new fields are optional. Existing targets continue to appear in Today so
+  a next step can be added when convenient.
+- Set `STALE_DEAL_DAYS` to change the 14-day inactivity threshold.
+
 ## 1.0.1 — 2026-10-20
 
 ### Fixed

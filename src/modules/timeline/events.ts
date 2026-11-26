@@ -35,6 +35,8 @@ const eventLabels: Record<string, string> = {
   followup_completed: "Follow-up completed",
   followup_snoozed: "Follow-up snoozed",
   followup_scheduled: "Follow-up scheduled",
+  next_step_scheduled: "Next step scheduled",
+  next_step_completed: "Next step completed",
   note_added: "Note added",
   stage_changed: "Stage changed",
   target_marked_dead: "Marked dead",
@@ -195,6 +197,10 @@ export function describeEventPayload(payloadJson: string | null) {
     text("dueAt") ? `follow-up due: ${formatDateTime(text("dueAt"))}` : null,
     text("nextFollowupAt")
       ? `next follow-up: ${formatDateTime(text("nextFollowupAt"))}`
+      : null,
+    text("nextStep") ? `next step: ${text("nextStep")}` : null,
+    text("nextStepAt")
+      ? `next step due: ${formatDateTime(text("nextStepAt"))}`
       : null,
     text("note")
   ].filter((line): line is string => Boolean(line));

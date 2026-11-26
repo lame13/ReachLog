@@ -10,6 +10,13 @@ export type PipelineCard = {
   companyName: string;
   status: string;
   stage: string;
+  valueCents: number | null;
+  currency: string;
+  expectedCloseDate: string | null;
+  nextStep: string | null;
+  nextStepAt: string | null;
+  lostReason: string | null;
+  closedAt: string | null;
   doNotResend: number;
   accountId: string | null;
   accountName: string | null;
@@ -45,6 +52,13 @@ export function getPipelineCards(filters: PipelineFilters = {}) {
         targets.company_name as companyName,
         targets.status,
         targets.stage,
+        targets.value_cents as valueCents,
+        targets.currency,
+        targets.expected_close_date as expectedCloseDate,
+        targets.next_step as nextStep,
+        targets.next_step_at as nextStepAt,
+        targets.lost_reason as lostReason,
+        targets.closed_at as closedAt,
         targets.do_not_resend as doNotResend,
         targets.account_id as accountId,
         accounts.name as accountName,
@@ -133,6 +147,9 @@ export type PipelineSummary = {
   byStage: Record<PipelineStageKey, number>;
   overdueFollowups: number;
   openFollowups: number;
+  missingNextSteps: number;
+  openValueByCurrency: Array<{ currency: string; cents: number }>;
+  wonValueByCurrency: Array<{ currency: string; cents: number }>;
   accounts: number;
   contacts: number;
 };
@@ -176,6 +193,40 @@ export function getPipelineSummary(): PipelineSummary {
 
   const won = byStage.won;
   const lost = byStage.lost;
+  const valueRows = sqlite
+    .prepare(
+      `
+      SELECT
+        CASE
+          WHEN stage = 'won' THEN 'won'
+          WHEN stage = 'lost' THEN 'lost'
+          ELSE 'open'
+        END as bucket,
+        UPPER(currency) as currency,
+        COALESCE(SUM(value_cents), 0) as cents
+      FROM targets
+      WHERE value_cents IS NOT NULL
+      GROUP BY bucket, UPPER(currency)
+      ORDER BY currency
+    `
+    )
+    .all() as Array<{
+    bucket: "open" | "won" | "lost";
+    currency: string;
+    cents: number;
+  }>;
+  const missingNextSteps = (
+    sqlite
+      .prepare(
+        `
+        SELECT COUNT(*) as count
+        FROM targets
+        WHERE stage NOT IN ('won', 'lost')
+          AND trim(COALESCE(next_step, '')) = ''
+      `
+      )
+      .get() as { count: number }
+  ).count;
 
   return {
     total,
@@ -185,6 +236,13 @@ export function getPipelineSummary(): PipelineSummary {
     byStage,
     overdueFollowups: counts.overdueFollowups,
     openFollowups: counts.openFollowups,
+    missingNextSteps,
+    openValueByCurrency: valueRows
+      .filter((row) => row.bucket === "open")
+      .map(({ currency, cents }) => ({ currency, cents })),
+    wonValueByCurrency: valueRows
+      .filter((row) => row.bucket === "won")
+      .map(({ currency, cents }) => ({ currency, cents })),
     accounts: counts.accounts,
     contacts: counts.contacts
   };

@@ -1,12 +1,20 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Ban, FileText, Mail, RefreshCw, Send } from "lucide-react";
+import {
+  Ban,
+  CheckCircle2,
+  CircleDollarSign,
+  FileText,
+  Mail,
+  RefreshCw,
+  Send
+} from "lucide-react";
 import { SendEmailModal } from "@/components/send-email-modal";
 import { StageMoveForm } from "@/components/stage-move-form";
 import { StagePill } from "@/components/stage-pill";
 import { StatusPill } from "@/components/status-pill";
 import { TimelineList } from "@/components/timeline-list";
-import { formatDateTime } from "@/modules/core/dates";
+import { formatDate, formatDateTime } from "@/modules/core/dates";
 import { recheckContactEmailAction } from "@/modules/emailVerification/actions";
 import {
   addTargetNoteAction,
@@ -24,6 +32,16 @@ import { getSendFeedback } from "@/modules/smtp/feedback";
 import { pipelineStages } from "@/modules/pipeline/stages";
 import { getTimeline } from "@/modules/timeline/events";
 import { getLatestTargetAiReview } from "@/modules/ai/review";
+import {
+  completeNextStepAction,
+  scheduleNextStepAction
+} from "@/modules/opportunities/actions";
+import {
+  centsToInputValue,
+  currencyOptions,
+  formatMoney,
+  normalizeCurrency
+} from "@/modules/opportunities/value";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -66,6 +84,21 @@ export default async function TargetDetailPage({
               <span>{target.contactEmail ?? "form only"}</span>
               <span>{target.domain ?? "unknown domain"}</span>
               <span>source: {target.sourceType}</span>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-3 text-sm">
+              <span className="font-medium">
+                {target.valueCents === null
+                  ? "Deal value not set"
+                  : formatMoney(
+                      target.valueCents,
+                      normalizeCurrency(target.currency)
+                    )}
+              </span>
+              <span className="text-muted">
+                {target.expectedCloseDate
+                  ? `Expected close ${formatDate(target.expectedCloseDate)}`
+                  : "No expected close date"}
+              </span>
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
               <StagePill stage={target.stage} />
@@ -199,6 +232,71 @@ export default async function TargetDetailPage({
         </div>
 
         <aside className="space-y-6">
+          <section
+            className="scroll-mt-24 rounded-lg border border-line bg-white shadow-sm"
+            id="next-step"
+          >
+            <div className="flex items-center justify-between border-b border-line px-4 py-3">
+              <div className="flex items-center gap-2">
+                <CircleDollarSign
+                  className="size-4 text-muted"
+                  aria-hidden="true"
+                />
+                <h2 className="font-semibold">Next step</h2>
+              </div>
+              {target.nextStepAt && (
+                <span className="text-xs text-muted">
+                  {formatDateTime(target.nextStepAt)}
+                </span>
+              )}
+            </div>
+            <form action={scheduleNextStepAction} className="space-y-3 p-4">
+              <input name="targetId" type="hidden" value={target.id} />
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-muted">
+                  What happens next?
+                </span>
+                <input
+                  className="h-10 w-full rounded-md border border-line px-3 text-sm outline-none focus:border-accent"
+                  defaultValue={target.nextStep ?? ""}
+                  maxLength={240}
+                  name="nextStep"
+                  placeholder="Send proposal, call Alex, check budget..."
+                  required
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-muted">
+                  Due date (optional)
+                </span>
+                <input
+                  className="h-9 w-full rounded-md border border-line px-3 text-sm outline-none focus:border-accent"
+                  defaultValue={getDateInputPart(target.nextStepAt)}
+                  name="nextStepDate"
+                  type="date"
+                />
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <button className="h-9 rounded-md bg-ink px-3 text-xs font-medium text-white">
+                  Save next step
+                </button>
+                {target.nextStep && (
+                  <button
+                    className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line px-3 text-xs font-medium hover:bg-panel"
+                    formAction={completeNextStepAction}
+                    formNoValidate
+                  >
+                    <CheckCircle2
+                      className="size-3.5"
+                      aria-hidden="true"
+                    />
+                    Mark done
+                  </button>
+                )}
+              </div>
+            </form>
+          </section>
+
           {aiReview && (
             <section className="rounded-lg border border-line bg-white shadow-sm">
               <div className="flex items-center justify-between border-b border-line px-4 py-3">
@@ -288,6 +386,51 @@ export default async function TargetDetailPage({
                 <DetailField label="Source" name="sourceType" value={target.sourceType} />
                 <DetailField label="Status" name="status" value={target.status} />
               </div>
+              <div className="grid grid-cols-[1fr_110px] gap-3">
+                <DetailField
+                  label="Deal value"
+                  name="dealValue"
+                  min="0"
+                  placeholder="0.00"
+                  step="0.01"
+                  type="number"
+                  value={centsToInputValue(target.valueCents)}
+                />
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium text-muted">
+                    Currency
+                  </span>
+                  <select
+                    className="h-9 w-full rounded-md border border-line bg-white px-2 text-sm outline-none focus:border-accent"
+                    defaultValue={normalizeCurrency(target.currency)}
+                    name="currency"
+                  >
+                    {currencyOptions.map((currency) => (
+                      <option key={currency.code} value={currency.code}>
+                        {currency.code}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <DetailField
+                label="Expected close"
+                name="expectedCloseDate"
+                type="date"
+                value={target.expectedCloseDate ?? ""}
+              />
+              <DetailField
+                label="Next step"
+                name="nextStep"
+                placeholder="What needs to happen next?"
+                value={target.nextStep ?? ""}
+              />
+              <DetailField
+                label="Next step date"
+                name="nextStepDate"
+                type="date"
+                value={getDateInputPart(target.nextStepAt)}
+              />
               <label className="block">
                 <span className="mb-1 block text-xs font-medium text-muted">
                   Pipeline stage
@@ -342,6 +485,12 @@ export default async function TargetDetailPage({
                   value={getTimeInputPart(nextOpenFollowup?.dueAt) || "09:00"}
                 />
               </div>
+              <DetailField
+                label="Why lost (optional)"
+                name="lostReason"
+                placeholder="Budget, timing, no response..."
+                value={target.lostReason ?? ""}
+              />
               <DetailField label="Source URL" name="sourceUrl" type="url" value={target.sourceUrl ?? ""} />
               <DetailField label="Dedupe key" name="dedupeKey" value={target.dedupeKey} />
               <label className="block">
@@ -487,7 +636,9 @@ function DetailField({
   value,
   type = "text",
   required = false,
-  placeholder
+  placeholder,
+  step,
+  min
 }: {
   label: string;
   name: string;
@@ -495,6 +646,8 @@ function DetailField({
   type?: string;
   required?: boolean;
   placeholder?: string;
+  step?: string;
+  min?: string;
 }) {
   return (
     <label className="block">
@@ -505,6 +658,8 @@ function DetailField({
         name={name}
         placeholder={placeholder}
         required={required}
+        min={min}
+        step={step}
         type={type}
       />
     </label>

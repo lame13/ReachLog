@@ -105,6 +105,13 @@ function getTargetsExport(params: URLSearchParams) {
     dedupeKey: target.dedupeKey,
     status: target.status,
     stage: target.stage,
+    valueCents: target.valueCents,
+    currency: target.currency,
+    expectedCloseDate: target.expectedCloseDate,
+    nextStep: target.nextStep,
+    nextStepAt: target.nextStepAt,
+    lostReason: target.lostReason,
+    closedAt: target.closedAt,
     doNotResend: target.doNotResend ? 1 : 0,
     activityAt: target.activityAt,
     updatedAt: target.updatedAt

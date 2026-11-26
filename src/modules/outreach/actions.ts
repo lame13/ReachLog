@@ -25,6 +25,11 @@ import {
   isPipelineStage,
   statusForStageMove
 } from "@/modules/pipeline/stages";
+import {
+  dateAtNine,
+  normalizeCurrency,
+  parseDealValueToCents
+} from "@/modules/opportunities/value";
 import { recordEvent } from "@/modules/timeline/record";
 
 type TargetFormValues = {
@@ -39,6 +44,12 @@ type TargetFormValues = {
   dedupeKey: string;
   status: string;
   stage: string;
+  valueCents: number | null;
+  currency: string;
+  expectedCloseDate: string;
+  nextStep: string;
+  nextStepAt: string | null;
+  lostReason: string;
   doNotResend: boolean;
   replyType: string;
   nextFollowupDate: string;
@@ -96,9 +107,11 @@ export async function createTargetAction(formData: FormData) {
         `
         INSERT INTO targets (
           id, contact_id, account_id, company_name, website_url, source_type,
-          source_url, dedupe_key, status, stage, do_not_resend, created_at, updated_at
+          source_url, dedupe_key, status, stage, value_cents, currency,
+          expected_close_date, next_step, next_step_at, lost_reason, closed_at,
+          do_not_resend, created_at, updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `
       )
       .run(
@@ -112,6 +125,13 @@ export async function createTargetAction(formData: FormData) {
         dedupeKey,
         values.status || "new",
         isPipelineStage(values.stage) ? values.stage : stageFromLegacyStatus(values.status),
+        values.valueCents,
+        values.currency,
+        values.expectedCloseDate || null,
+        values.nextStep || null,
+        values.nextStep ? values.nextStepAt : null,
+        values.lostReason || null,
+        ["won", "lost"].includes(values.stage) ? now : null,
         values.doNotResend ? 1 : 0,
         now,
         now
@@ -181,8 +201,10 @@ export async function updateTargetAction(formData: FormData) {
   const nextFollowupAt = getNextFollowupIso(values);
   const nextStage = isPipelineStage(values.stage) ? values.stage : null;
   const currentTarget = sqlite
-    .prepare("SELECT stage, status FROM targets WHERE id = ?")
-    .get(targetId) as { stage: string; status: string } | undefined;
+    .prepare("SELECT stage, status, closed_at as closedAt FROM targets WHERE id = ?")
+    .get(targetId) as
+    | { stage: string; status: string; closedAt: string | null }
+    | undefined;
 
   if (!currentTarget) {
     return;
@@ -194,6 +216,10 @@ export async function updateTargetAction(formData: FormData) {
     nextStage && nextStage !== currentTarget.stage && values.status === currentTarget.status
       ? statusForStageMove(currentTarget.status, nextStage, values.doNotResend)
       : values.status || "new";
+  const nextClosedAt =
+    nextStage === "won" || nextStage === "lost"
+      ? currentTarget.closedAt ?? now
+      : null;
 
   const transaction = sqlite.transaction(() => {
     const accountId = findOrCreateAccount({
@@ -226,6 +252,13 @@ export async function updateTargetAction(formData: FormData) {
             dedupe_key = ?,
             status = ?,
             stage = COALESCE(?, stage),
+            value_cents = ?,
+            currency = ?,
+            expected_close_date = ?,
+            next_step = ?,
+            next_step_at = ?,
+            lost_reason = ?,
+            closed_at = ?,
             do_not_resend = ?,
             updated_at = ?
         WHERE id = ?
@@ -241,6 +274,13 @@ export async function updateTargetAction(formData: FormData) {
         dedupeKey,
         nextStatus,
         nextStage,
+        values.valueCents,
+        values.currency,
+        values.expectedCloseDate || null,
+        values.nextStep || null,
+        values.nextStep ? values.nextStepAt : null,
+        nextStage === "lost" ? values.lostReason || null : null,
+        nextClosedAt,
         values.doNotResend ? 1 : 0,
         now,
         targetId
@@ -248,6 +288,7 @@ export async function updateTargetAction(formData: FormData) {
 
     const targetHardBlocked =
       nextStage === "lost" ||
+      nextStage === "won" ||
       isSendBlockedStatus(nextStatus) ||
       isDoNotResendHardBlock({
         doNotResend: values.doNotResend,
@@ -434,12 +475,22 @@ function getTargetFormValues(formData: FormData): TargetFormValues {
     dedupeKey: clean(formData.get("dedupeKey")),
     status: clean(formData.get("status")) || "new",
     stage: clean(formData.get("stage")),
+    valueCents: parseDealValueToCents(formData.get("dealValue")) ?? null,
+    currency: normalizeCurrency(clean(formData.get("currency"))),
+    expectedCloseDate: normalizeDateInput(clean(formData.get("expectedCloseDate"))),
+    nextStep: clean(formData.get("nextStep")),
+    nextStepAt: dateAtNine(normalizeDateInput(clean(formData.get("nextStepDate")))),
+    lostReason: clean(formData.get("lostReason")),
     doNotResend: formData.get("doNotResend") === "on",
     replyType: clean(formData.get("replyType")),
     nextFollowupDate: clean(formData.get("nextFollowupDate")),
     nextFollowupTime: clean(formData.get("nextFollowupTime")) || "09:00",
     note: clean(formData.get("note"))
   };
+}
+
+function normalizeDateInput(value: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : "";
 }
 
 function getNextFollowupIso(values: TargetFormValues) {

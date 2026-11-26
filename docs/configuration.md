@@ -19,6 +19,7 @@ Saved connections live in `<data-dir>/connections.json` with owner-only file per
 | `APP_URL` | Local listener URL | Links in notifications |
 | `REACHLOG_HOST` | `127.0.0.1` | Listener address |
 | `PORT` | `3000` | Listener port |
+| `STALE_DEAL_DAYS` | `14` | Days without activity before an opportunity with no next step is highlighted in Today |
 
 Use an IANA timezone such as `Europe/London` or `Asia/Bangkok`. CLI flags override the corresponding host, port and data-directory variables.
 

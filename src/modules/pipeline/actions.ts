@@ -24,8 +24,17 @@ export async function moveTargetStageAction(formData: FormData) {
 
   const sqlite = getSqlite();
   const current = sqlite
-    .prepare("SELECT stage, status, do_not_resend as doNotResend FROM targets WHERE id = ?")
-    .get(targetId) as { stage: string; status: string; doNotResend: number } | undefined;
+    .prepare(
+      "SELECT stage, status, do_not_resend as doNotResend, closed_at as closedAt FROM targets WHERE id = ?"
+    )
+    .get(targetId) as
+    | {
+        stage: string;
+        status: string;
+        doNotResend: number;
+        closedAt: string | null;
+      }
+    | undefined;
 
   if (!current) {
     return;
@@ -39,15 +48,27 @@ export async function moveTargetStageAction(formData: FormData) {
 
   const now = new Date().toISOString();
   const status = statusForStageMove(current.status, stage, current.doNotResend);
+  const closedAt =
+    stage === "won" || stage === "lost" ? current.closedAt ?? now : null;
 
   const transaction = sqlite.transaction(() => {
     sqlite
-      .prepare("UPDATE targets SET stage = ?, status = ?, updated_at = ? WHERE id = ?")
-      .run(stage, status, now, targetId);
+      .prepare(
+        `
+        UPDATE targets
+        SET stage = ?,
+            status = ?,
+            closed_at = ?,
+            lost_reason = CASE WHEN ? = 'lost' THEN lost_reason ELSE NULL END,
+            updated_at = ?
+        WHERE id = ?
+      `
+      )
+      .run(stage, status, closedAt, stage, now, targetId);
 
-    if (stage === "lost") {
-      // A closed-lost target keeps its outreach history but stops queueing
-      // reminders, exactly as marking it dead did before stages existed.
+    if (stage === "won" || stage === "lost") {
+      // Closed opportunities keep their outreach history but stop queueing
+      // reminders. Reopening a record can create a new next step.
       sqlite
         .prepare(
           `
@@ -69,7 +90,8 @@ export async function moveTargetStageAction(formData: FormData) {
         stage,
         previousStage,
         previousStatus: current.status,
-        status
+        status,
+        closedAt
       }
     });
   });

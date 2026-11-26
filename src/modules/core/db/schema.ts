@@ -67,6 +67,13 @@ export const targets = sqliteTable(
     dedupeKey: text("dedupe_key").notNull(),
     status: text("status").notNull(),
     stage: text("stage").notNull().default("new"),
+    valueCents: integer("value_cents"),
+    currency: text("currency").notNull().default("USD"),
+    expectedCloseDate: text("expected_close_date"),
+    nextStep: text("next_step"),
+    nextStepAt: text("next_step_at"),
+    lostReason: text("lost_reason"),
+    closedAt: text("closed_at"),
     doNotResend: integer("do_not_resend", { mode: "boolean" })
       .notNull()
       .default(false),
@@ -80,7 +87,11 @@ export const targets = sqliteTable(
     contactIdx: index("targets_contact_idx").on(table.contactId),
     accountIdx: index("targets_account_idx").on(table.accountId),
     statusIdx: index("targets_status_idx").on(table.status),
-    stageIdx: index("targets_stage_idx").on(table.stage)
+    stageIdx: index("targets_stage_idx").on(table.stage),
+    nextStepIdx: index("targets_next_step_idx").on(table.nextStepAt),
+    expectedCloseIdx: index("targets_expected_close_idx").on(
+      table.expectedCloseDate
+    )
   })
 );
 

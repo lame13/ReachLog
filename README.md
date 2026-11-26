@@ -97,10 +97,16 @@ with AI disabled.
 
 ## Accounts, contacts and the pipeline
 
-Open **Pipeline** to see your targets grouped by stage. Move a card when its
-stage changes; enabled AI triage can also advance it after a reply. Moving a card updates the outreach status, records the change on the
-timeline, and cancels open follow-ups when you close something as Lost. **New
-target** and the CSV import put companies on the board for you.
+Open **Today** for the conversations and deadlines that need attention. It
+combines replies, scheduled next steps, due follow-ups, and opportunities that
+have gone quiet. Each opportunity can carry an optional deal value, expected
+close date, one plain-language next step, and a reason when it is lost.
+
+Open **Pipeline** to see those opportunities by stage. Cards show value, close
+date, next step, and recent activity. Move a card when its stage changes;
+enabled AI triage can also advance it after a reply. Moving a card records the
+change on the timeline and closes open follow-ups when the opportunity is Won
+or Lost. **New target** and the CSV import put companies on the board for you.
 
 Open **Accounts** for the companies behind your outreach, and **Contacts** for
 the people. An account page collects its contacts, its targets, its mail and its
@@ -120,6 +126,8 @@ the stages do not cover.
 - Track companies as **accounts**, with the contacts, targets and notes that belong to each one.
 - Track people as **contacts**, with a title, phone, tags, links and their own history.
 - Move each target through a **pipeline**: New, Contacted, Replied, In conversation, Qualified, Won or Lost.
+- Start each day from **Today**, which combines replies, next steps, follow-ups and stale opportunities.
+- Track an optional deal value, expected close date, next step and lost reason for each opportunity.
 - Track outreach history and do-not-contact records.
 - Import CSV files with a duplicate check before changes are made.
 - Save email drafts and schedule manual follow-ups.

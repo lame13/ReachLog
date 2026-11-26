@@ -1,5 +1,10 @@
 import Link from "next/link";
-import { Clock3, MailCheck, Send, Target } from "lucide-react";
+import {
+  CircleDollarSign,
+  Target,
+  Timer,
+  Trophy
+} from "lucide-react";
 import { ActivitySeriesFilter } from "@/components/activity-series-filter";
 import { ExportLinks } from "@/components/export-links";
 import { MetricCard } from "@/components/metric-card";
@@ -11,6 +16,7 @@ import {
 } from "@/modules/outreach/queries";
 import { getPipelineSummary } from "@/modules/pipeline/queries";
 import { pipelineStages } from "@/modules/pipeline/stages";
+import { formatPipelineValue } from "@/modules/opportunities/value";
 
 type PageProps = {
   searchParams?: Promise<{
@@ -36,6 +42,16 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
   const pipeline = getPipelineSummary();
   const replyRate = percentage(data.metrics.repliedTargets, data.metrics.touchedTargets);
   const outreachRate = percentage(data.metrics.touchedTargets, data.metrics.totalTargets);
+  const openValues = data.valueByStage
+    .filter((row) => row.stage !== "won" && row.stage !== "lost")
+    .map((row) => ({ currency: row.currency, cents: row.cents }));
+  const wonValues = data.valueByStage
+    .filter((row) => row.stage === "won")
+    .map((row) => ({ currency: row.currency, cents: row.cents }));
+  const winRate = percentage(
+    data.closeMetrics.won,
+    data.closeMetrics.won + data.closeMetrics.lost
+  );
 
   return (
     <>
@@ -57,27 +73,35 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           icon={Target}
-          label="Targets"
-          value={data.metrics.totalTargets}
+          label="Open opportunities"
+          value={pipeline.open}
         />
         <MetricCard
-          icon={Send}
-          label={`Outreached (${outreachRate})`}
-          value={data.metrics.touchedTargets}
+          icon={CircleDollarSign}
+          label="Open pipeline value"
+          value={formatPipelineValue(openValues)}
         />
         <MetricCard
-          icon={MailCheck}
-          label={`Replies (${replyRate})`}
+          icon={Trophy}
+          label="Win rate"
           tone="green"
-          value={data.metrics.repliedTargets}
+          value={winRate}
         />
         <MetricCard
-          icon={Clock3}
-          label="Open follow-ups"
-          tone="amber"
-          value={data.metrics.openFollowups}
+          icon={Timer}
+          label="Average days to close"
+          value={
+            data.closeMetrics.averageDays === null
+              ? "Not enough data"
+              : Math.round(data.closeMetrics.averageDays)
+          }
         />
       </div>
+      <p className="mt-3 text-xs text-muted">
+        {data.closeMetrics.won} won and {data.closeMetrics.lost} lost. Won
+        value: {formatPipelineValue(wonValues)}. Outreach conversion:{" "}
+        {outreachRate} of targets touched; {replyRate} of touched targets replied.
+      </p>
 
       <section className="mt-6 rounded-lg border border-line bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
@@ -104,13 +128,15 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
             <h2 className="font-semibold">Source Performance</h2>
           </div>
           <div className="overflow-x-auto">
-            <table className="min-w-[680px] text-sm">
+            <table className="min-w-[760px] text-sm">
               <thead className="bg-panel text-left text-muted">
                 <tr>
                   <th className="px-4 py-3 font-medium">Source</th>
                   <th className="px-4 py-3 font-medium">Targets</th>
                   <th className="px-4 py-3 font-medium">Outreached</th>
                   <th className="px-4 py-3 font-medium">Replies</th>
+                  <th className="px-4 py-3 font-medium">Qualified</th>
+                  <th className="px-4 py-3 font-medium">Won</th>
                   <th className="px-4 py-3 font-medium">Reply rate</th>
                   <th className="px-4 py-3 font-medium">Dead</th>
                 </tr>
@@ -122,6 +148,8 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
                     <td className="px-4 py-3">{row.total}</td>
                     <td className="px-4 py-3">{row.sent}</td>
                     <td className="px-4 py-3">{row.replied}</td>
+                    <td className="px-4 py-3">{row.qualified}</td>
+                    <td className="px-4 py-3">{row.won}</td>
                     <td className="px-4 py-3">
                       {percentage(row.replied, row.sent)}
                     </td>

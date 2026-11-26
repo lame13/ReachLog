@@ -4,7 +4,7 @@ import { ExportLinks } from "@/components/export-links";
 import { SendEmailModal } from "@/components/send-email-modal";
 import { StagePill } from "@/components/stage-pill";
 import { StatusPill } from "@/components/status-pill";
-import { formatDateTime } from "@/modules/core/dates";
+import { formatDate, formatDateTime } from "@/modules/core/dates";
 import { createTargetAction } from "@/modules/outreach/actions";
 import {
   getSendTarget,
@@ -15,6 +15,10 @@ import { isEmailVerificationBlocking } from "@/modules/emailVerification/service
 import { isTargetActionBlocked } from "@/modules/outreach/status";
 import { pipelineStages } from "@/modules/pipeline/stages";
 import { getSendFeedback } from "@/modules/smtp/feedback";
+import {
+  formatMoney,
+  normalizeCurrency
+} from "@/modules/opportunities/value";
 
 type PageProps = {
   searchParams?: Promise<{
@@ -181,7 +185,7 @@ export default async function TargetsPage({ searchParams }: PageProps) {
           />
         </div>
         <div className="overflow-x-auto">
-          <table className="min-w-[960px] text-sm">
+          <table className="min-w-[1120px] text-sm">
             <thead className="bg-panel text-left text-muted">
               <tr>
                 <th className="px-4 py-3 font-medium">Company</th>
@@ -189,6 +193,8 @@ export default async function TargetsPage({ searchParams }: PageProps) {
                 <th className="px-4 py-3 font-medium">Domain</th>
                 <th className="px-4 py-3 font-medium">Source</th>
                 <th className="px-4 py-3 font-medium">Stage</th>
+                <th className="px-4 py-3 font-medium">Value</th>
+                <th className="px-4 py-3 font-medium">Next step</th>
                 <th className="px-4 py-3 font-medium">Status</th>
                 <th className="px-4 py-3 font-medium">Action</th>
               </tr>
@@ -260,6 +266,30 @@ export default async function TargetsPage({ searchParams }: PageProps) {
                       <StagePill stage={target.stage} />
                     </td>
                     <td className="px-4 py-3">
+                      {target.valueCents === null ? (
+                        <span className="text-muted">not set</span>
+                      ) : (
+                        formatMoney(
+                          target.valueCents,
+                          normalizeCurrency(target.currency)
+                        )
+                      )}
+                    </td>
+                    <td className="max-w-56 px-4 py-3">
+                      {target.nextStep ? (
+                        <>
+                          <div className="font-medium">{target.nextStep}</div>
+                          <div className="mt-1 text-xs text-muted">
+                            {target.nextStepAt
+                              ? `Due ${formatDate(target.nextStepAt)}`
+                              : "No due date"}
+                          </div>
+                        </>
+                      ) : (
+                        <span className="text-muted">No next step</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
                       <StatusPill status={target.status} />
                     </td>
                     <td className="px-4 py-3">
@@ -283,7 +313,7 @@ export default async function TargetsPage({ searchParams }: PageProps) {
                 })
               ) : (
                 <tr className="border-t border-line">
-                  <td className="px-4 py-10 text-center text-muted" colSpan={7}>
+                  <td className="px-4 py-10 text-center text-muted" colSpan={9}>
                     No targets match these filters.
                   </td>
                 </tr>

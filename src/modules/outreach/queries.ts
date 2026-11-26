@@ -12,6 +12,7 @@ import {
   threads
 } from "@/modules/core/db/schema";
 import { endOfTodayIso, startOfTodayIso } from "@/modules/core/dates";
+import { env } from "@/modules/core/env";
 import { isTargetActionBlocked } from "@/modules/outreach/status";
 import { getEmailDraft } from "@/modules/smtp/drafts";
 
@@ -46,6 +47,13 @@ export type TargetListRow = {
   dedupeKey: string;
   status: string;
   stage: string;
+  valueCents: number | null;
+  currency: string;
+  expectedCloseDate: string | null;
+  nextStep: string | null;
+  nextStepAt: string | null;
+  lostReason: string | null;
+  closedAt: string | null;
   accountId: string | null;
   accountName: string | null;
   doNotResend: number;
@@ -62,6 +70,10 @@ export function getDashboardData() {
   const sqlite = getSqlite();
   const dueFollowups = getFollowups("due");
   const overdueFollowups = getFollowups("overdue");
+  const todayEnd = endOfTodayIso();
+  const staleBefore = new Date(
+    Date.now() - env.STALE_DEAL_DAYS * 86_400_000
+  ).toISOString();
 
   const replyCount = sqlite
     .prepare(
@@ -106,7 +118,7 @@ export function getDashboardData() {
         AND ${actionableTargetSql("targets")}
         AND NOT (${latestNonActionableMessageSql("threads.id")})
       ORDER BY threads.last_inbound_at DESC
-      LIMIT 5
+      LIMIT 20
     `
     )
     .all() as Array<{
@@ -119,7 +131,129 @@ export function getDashboardData() {
     status: string;
   }>;
 
-  const followups = dueFollowups.slice(0, 5);
+  const followups = dueFollowups.slice(0, 20);
+  const nextSteps = sqlite
+    .prepare(
+      `
+      SELECT
+        targets.id as targetId,
+        targets.company_name as companyName,
+        contacts.name as contactName,
+        contacts.email as contactEmail,
+        targets.next_step as nextStep,
+        targets.next_step_at as nextStepAt,
+        targets.stage
+      FROM targets
+      LEFT JOIN contacts ON contacts.id = targets.contact_id
+      WHERE targets.stage NOT IN ('won', 'lost')
+        AND trim(COALESCE(targets.next_step, '')) <> ''
+        AND targets.next_step_at IS NOT NULL
+        AND targets.next_step_at <= ?
+      ORDER BY targets.next_step_at ASC, targets.company_name COLLATE NOCASE ASC
+      LIMIT 20
+    `
+    )
+    .all(todayEnd) as Array<{
+    targetId: string;
+    companyName: string;
+    contactName: string | null;
+    contactEmail: string | null;
+    nextStep: string;
+    nextStepAt: string;
+    stage: string;
+  }>;
+  const nextStepCount = (
+    sqlite
+      .prepare(
+        `
+        SELECT COUNT(*) as count
+        FROM targets
+        WHERE stage NOT IN ('won', 'lost')
+          AND trim(COALESCE(next_step, '')) <> ''
+          AND next_step_at IS NOT NULL
+          AND next_step_at <= ?
+      `
+      )
+      .get(todayEnd) as { count: number }
+  ).count;
+  const staleOpportunities = sqlite
+    .prepare(
+      `
+      SELECT
+        targets.id as targetId,
+        targets.company_name as companyName,
+        contacts.name as contactName,
+        contacts.email as contactEmail,
+        targets.stage,
+        targets.next_step as nextStep,
+        targets.next_step_at as nextStepAt,
+        MAX(
+          targets.updated_at,
+          COALESCE((
+            SELECT MAX(COALESCE(messages.sent_at, messages.received_at, messages.created_at))
+            FROM messages
+            INNER JOIN threads ON threads.id = messages.thread_id
+            WHERE threads.target_id = targets.id
+          ), ''),
+          COALESCE((
+            SELECT MAX(threads.updated_at)
+            FROM threads
+            WHERE threads.target_id = targets.id
+          ), '')
+        ) as activityAt
+      FROM targets
+      LEFT JOIN contacts ON contacts.id = targets.contact_id
+      WHERE targets.stage NOT IN ('won', 'lost')
+        AND (
+          trim(COALESCE(targets.next_step, '')) = ''
+          OR targets.next_step_at IS NULL
+        )
+      ORDER BY activityAt ASC
+      LIMIT 20
+    `
+    )
+    .all() as Array<{
+    targetId: string;
+    companyName: string;
+    contactName: string | null;
+    contactEmail: string | null;
+    stage: string;
+    nextStep: string | null;
+    nextStepAt: string | null;
+    activityAt: string;
+  }>;
+  const staleCandidates = staleOpportunities.filter(
+    (target) => target.activityAt < staleBefore
+  );
+  const staleCount = (
+    sqlite
+      .prepare(
+        `
+        SELECT COUNT(*) as count
+        FROM targets
+        WHERE targets.stage NOT IN ('won', 'lost')
+          AND (
+            trim(COALESCE(targets.next_step, '')) = ''
+            OR targets.next_step_at IS NULL
+          )
+          AND MAX(
+            targets.updated_at,
+            COALESCE((
+              SELECT MAX(COALESCE(messages.sent_at, messages.received_at, messages.created_at))
+              FROM messages
+              INNER JOIN threads ON threads.id = messages.thread_id
+              WHERE threads.target_id = targets.id
+            ), ''),
+            COALESCE((
+              SELECT MAX(threads.updated_at)
+              FROM threads
+              WHERE threads.target_id = targets.id
+            ), '')
+          ) < ?
+      `
+      )
+      .get(staleBefore) as { count: number }
+  ).count;
 
   const recentMessages = db
     .select({
@@ -183,10 +317,14 @@ export function getDashboardData() {
       followupsDue: dueFollowups.length,
       overdueFollowups: overdueFollowups.length,
       sentNoReply: sentNoReplyCount?.count ?? 0,
-      failedSends: failedSendCount?.count ?? 0
+      failedSends: failedSendCount?.count ?? 0,
+      nextStepsDue: nextStepCount,
+      staleOpportunities: staleCount
     },
     replies,
     followups,
+    nextSteps,
+    staleOpportunities: staleCandidates.slice(0, 8),
     recentMessages,
     failedSends
   };
@@ -205,6 +343,13 @@ export function getTargets(filters: TargetFilters = {}) {
         targets.dedupe_key as dedupeKey,
         targets.status,
         targets.stage,
+        targets.value_cents as valueCents,
+        targets.currency,
+        targets.expected_close_date as expectedCloseDate,
+        targets.next_step as nextStep,
+        targets.next_step_at as nextStepAt,
+        targets.lost_reason as lostReason,
+        targets.closed_at as closedAt,
         targets.account_id as accountId,
         accounts.name as accountName,
         targets.do_not_resend as doNotResend,
@@ -260,7 +405,9 @@ export function getTargets(filters: TargetFilters = {}) {
         target.dedupeKey,
         target.status,
         target.stage,
-        target.accountName
+        target.accountName,
+        target.nextStep,
+        target.lostReason
       ]
         .filter(Boolean)
         .join(" ")
@@ -368,6 +515,13 @@ export function getTargetDetail(id: string) {
       dedupeKey: targets.dedupeKey,
       status: targets.status,
       stage: targets.stage,
+      valueCents: targets.valueCents,
+      currency: targets.currency,
+      expectedCloseDate: targets.expectedCloseDate,
+      nextStep: targets.nextStep,
+      nextStepAt: targets.nextStepAt,
+      lostReason: targets.lostReason,
+      closedAt: targets.closedAt,
       doNotResend: targets.doNotResend,
       createdAt: targets.createdAt,
       updatedAt: targets.updatedAt,
@@ -680,6 +834,8 @@ export function getAnalyticsData(rangeKey: AnalyticsRangeKey = "7d") {
         COUNT(*) as total,
         COUNT(CASE WHEN ${outboundEvidenceSql("targets.id", "targets.source_type")} THEN 1 END) as sent,
         COUNT(CASE WHEN ${replyEvidenceSql("targets.id")} THEN 1 END) as replied,
+        COUNT(CASE WHEN targets.stage = 'qualified' THEN 1 END) as qualified,
+        COUNT(CASE WHEN targets.stage = 'won' THEN 1 END) as won,
         COUNT(CASE WHEN targets.status = 'dead' THEN 1 END) as dead
       FROM targets
       GROUP BY targets.source_type
@@ -691,8 +847,48 @@ export function getAnalyticsData(rangeKey: AnalyticsRangeKey = "7d") {
     total: number;
     sent: number;
     replied: number;
+    qualified: number;
+    won: number;
     dead: number;
   }>;
+
+  const valueByStage = sqlite
+    .prepare(
+      `
+      SELECT
+        stage,
+        UPPER(currency) as currency,
+        COUNT(*) as count,
+        COALESCE(SUM(value_cents), 0) as cents
+      FROM targets
+      WHERE value_cents IS NOT NULL
+      GROUP BY stage, UPPER(currency)
+      ORDER BY stage, currency
+    `
+    )
+    .all() as Array<{
+    stage: string;
+    currency: string;
+    count: number;
+    cents: number;
+  }>;
+
+  const closeMetrics = sqlite
+    .prepare(
+      `
+      SELECT
+        COUNT(CASE WHEN stage = 'won' THEN 1 END) as won,
+        COUNT(CASE WHEN stage = 'lost' THEN 1 END) as lost,
+        AVG(
+          CASE
+            WHEN stage IN ('won', 'lost') AND closed_at IS NOT NULL
+            THEN MAX(0, julianday(closed_at) - julianday(created_at))
+          END
+        ) as averageDays
+      FROM targets
+    `
+    )
+    .get() as { won: number; lost: number; averageDays: number | null };
 
   const recentEvents = sqlite
     .prepare(
@@ -728,6 +924,8 @@ export function getAnalyticsData(rangeKey: AnalyticsRangeKey = "7d") {
     statusCounts,
     metrics,
     sourcePerformance,
+    valueByStage,
+    closeMetrics,
     recentEvents,
     dailyActivity,
     dailyRange: {

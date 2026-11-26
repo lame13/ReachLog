@@ -167,8 +167,19 @@ export async function markDeadAction(formData: FormData) {
       .run(followupId, now, targetId);
 
     sqlite
-      .prepare("UPDATE targets SET status = 'dead', updated_at = ? WHERE id = ?")
-      .run(now, targetId);
+      .prepare(
+        `
+        UPDATE targets
+        SET status = 'dead',
+            stage = 'lost',
+            next_step = NULL,
+            next_step_at = NULL,
+            closed_at = COALESCE(closed_at, ?),
+            updated_at = ?
+        WHERE id = ?
+      `
+      )
+      .run(now, now, targetId);
 
     sqlite
       .prepare(
@@ -183,6 +194,7 @@ export async function markDeadAction(formData: FormData) {
   revalidatePath("/followups");
   revalidatePath(`/targets/${targetId}`);
   revalidatePath("/analytics");
+  revalidatePath("/pipeline");
 }
 
 function revalidateFollowupPaths(targetId: string) {

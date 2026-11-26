@@ -1,13 +1,30 @@
-# ReachLog 1.0.1
+# ReachLog 1.1.0
 
-Fixes the broken screenshots on the npm README. Images now use public,
-versioned CDN URLs for the screenshots included in ReachLog 1.0.0, so viewing
-them does not require access to the private GitHub repository.
+ReachLog now helps answer three everyday questions: what needs attention today,
+what is each opportunity worth, and what should happen next.
 
-Both public image URLs were verified to return PNG files identical to the
-committed screenshots. This release changes documentation and version metadata;
-application behavior and the database schema are unchanged.
+## Today
+
+The dashboard is now **Today**. It combines replies, scheduled next steps, due
+follow-ups and opportunities that have gone quiet into one queue. Routine
+actions such as marking a next step done, sending a follow-up, snoozing it or
+closing it as lost remain on the same screen.
+
+## A useful pipeline
+
+Every opportunity can carry an optional deal value and currency, expected close
+date, next step and lost reason. Pipeline cards show the commercial context and
+Today highlights opportunities without a next step.
+
+Analytics adds open and won pipeline value, win rate, average time to close, and
+qualified and won counts by source.
+
+## Upgrade
+
+Upgrade in place. Migration 0010 keeps every existing target, contact, message,
+follow-up and setting. New fields are optional, and existing conversations
+remain visible while you add next steps.
 
 ```sh
-npm install --global reachlog@1.0.1
+npm install --global reachlog@1.1.0
 ```
