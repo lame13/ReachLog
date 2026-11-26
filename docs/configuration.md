@@ -19,7 +19,7 @@ Saved connections live in `<data-dir>/connections.json` with owner-only file per
 | `APP_URL` | Local listener URL | Links in notifications |
 | `REACHLOG_HOST` | `127.0.0.1` | Listener address |
 | `PORT` | `3000` | Listener port |
-| `STALE_DEAL_DAYS` | `14` | Days without activity before an opportunity with no next step is highlighted in Today |
+| `STALE_DEAL_DAYS` | `14` | Days without activity before an opportunity with no next step is highlighted in Today and stale reminders |
 
 Use an IANA timezone such as `Europe/London` or `Asia/Bangkok`. CLI flags override the corresponding host, port and data-directory variables.
 
@@ -106,13 +106,13 @@ Email text is sent to the configured provider. Do not enable AI on a mailbox who
 
 ## Optional notifications and address checks
 
-Telegram requires a bot token and chat ID, configured in Settings or with `TELEGRAM_ENABLED=true`, `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`. **Test connection** checks bot and chat access without sending a message. **Send test notification** sends a real notification to that chat. Reply and due-date notifications can contain contact details and message excerpts.
+Telegram requires a bot token and chat ID, configured in Settings or with `TELEGRAM_ENABLED=true`, `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`. **Test connection** checks bot and chat access without sending a message. **Send test notification** sends a real notification to that chat. Reply, due-date and stale-opportunity notifications can contain contact details and message excerpts.
 
 EmailListVerify requires `EMAILLISTVERIFY_ENABLED=true` and `EMAILLISTVERIFY_API_KEY`. Addresses are sent to that service for verification. Optional settings: `EMAILLISTVERIFY_TIMEOUT_MS=15000`, `EMAILLISTVERIFY_BATCH_SIZE=25`.
 
 ## Scheduled tasks
 
-Built-in scheduling starts with the packaged CLI and `npm run dev`. Enable each schedule under **Settings → Background tasks**. Default intervals are five minutes for mailbox sync, fifteen minutes for follow-up reminders, five minutes for AI automation, and one day for backups. Intervals can be changed from one minute to one week. New installations and upgrades leave every schedule paused. Mail sync requires IMAP; follow-up reminders require Telegram; AI requires an enabled provider.
+Built-in scheduling starts with the packaged CLI and `npm run dev`. Enable each schedule under **Settings → Background tasks**. Default intervals are five minutes for mailbox sync, fifteen minutes for due and stale reminders, five minutes for AI automation, and one day for backups. Intervals can be changed from one minute to one week. New installations and upgrades leave every schedule paused. Mail sync requires IMAP; Telegram reminders require a configured bot; AI requires an enabled provider.
 
 **Run now** queues an enabled task for the next scheduler tick, normally within five seconds. The page refreshes run status while visible. Each task retains its last successful run even if a later attempt fails. Pausing prevents future runs but lets current work finish. The scheduler stops its workers when ReachLog stops, records interrupted runs, and retries due work after restart. Overdue intervals are coalesced into one run. Only one scheduler owns a database at a time, and worker leases prevent overlapping runs with external workers. Scheduled SMTP sending is not supported.
 

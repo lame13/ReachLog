@@ -562,7 +562,7 @@ test("0.4.0 accounts, contacts and pipeline", async (t) => {
       (sqlite
         .prepare("SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1")
         .get() as { version: string }).version,
-      "0010"
+      "0012"
     );
   });
 

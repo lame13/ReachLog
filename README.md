@@ -115,6 +115,11 @@ history. Accounts are created automatically when a target names a company, and
 targets with the same company domain share one account. Without a domain,
 ReachLog matches the company name.
 
+An opportunity has one primary contact for mail and sending. Add other people
+from their contact records when a decision involves a champion, finance lead,
+blocker or other stakeholder. ReachLog also suggests likely duplicate accounts
+and contacts for review; merging is always explicit and requires confirmation.
+
 Stages are a fixed set, so they can be counted in Analytics and used as filters.
 The free-text status that ReachLog has always had is still there for anything
 the stages do not cover.
@@ -125,6 +130,7 @@ the stages do not cover.
 - Review AI suggestions, supporting quotes, and drafts before applying uncertain decisions.
 - Track companies as **accounts**, with the contacts, targets and notes that belong to each one.
 - Track people as **contacts**, with a title, phone, tags, links and their own history.
+- Add other people to an opportunity with a clear role, and review likely duplicate accounts or contacts before merging.
 - Move each target through a **pipeline**: New, Contacted, Replied, In conversation, Qualified, Won or Lost.
 - Start each day from **Today**, which combines replies, next steps, follow-ups and stale opportunities.
 - Track an optional deal value, expected close date, next step and lost reason for each opportunity.
@@ -133,7 +139,7 @@ the stages do not cover.
 - Save email drafts and schedule manual follow-ups.
 - Reuse email templates with contact variables, previews, and editable messages.
 - Configure and test SMTP, IMAP, and Telegram in Settings. Discover available mailboxes and use local Proton Bridge presets.
-- Schedule mailbox sync, follow-up reminders, and database backups while the app is running.
+- Schedule mailbox sync, due and stale reminders, and database backups while the app is running.
 - Connect SMTP for individual sends and IMAP for replies and sent messages. Proton Bridge is supported.
 - Export accounts, targets, contacts, messages, follow-ups and history as CSV or JSON.
 - Search company names, contacts, message text and contact form submissions from the header.
@@ -178,7 +184,7 @@ reachlog worker followup-check
 reachlog worker backup
 ```
 
-Open **Settings → Background tasks** to enable schedules, choose intervals, run a task now, and check the last run, last success, next run, or failure. New schedules start paused; upgrades preserve your existing settings. They run only while ReachLog is running. An overdue task runs once after restart; missed intervals are not replayed. Follow-up reminders do not send email; AI autopilot can, only when explicitly enabled.
+Open **Settings → Background tasks** to enable schedules, choose intervals, run a task now, and check the last run, last success, next run, or failure. New schedules start paused; upgrades preserve your existing settings. They run only while ReachLog is running. An overdue task runs once after restart; missed intervals are not replayed. Follow-up and stale reminders do not send email; AI autopilot can, only when explicitly enabled.
 
 For an existing cron or systemd setup, start with `reachlog --no-scheduler` or `REACHLOG_SCHEDULER_ENABLED=false`. One-shot worker commands remain available and share worker locks with built-in scheduling.
 

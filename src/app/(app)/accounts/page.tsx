@@ -4,6 +4,7 @@ import { ExportLinks } from "@/components/export-links";
 import { formatDateTime, timeAgo } from "@/modules/core/dates";
 import { createAccountAction } from "@/modules/accounts/actions";
 import { getAccounts } from "@/modules/accounts/queries";
+import { getDuplicateSuggestionCount } from "@/modules/duplicates/queries";
 
 type PageProps = {
   searchParams?: Promise<{
@@ -16,6 +17,7 @@ type PageProps = {
 export default async function AccountsPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const accounts = getAccounts({ q: params?.q, stage: params?.stage });
+  const duplicateCount = getDuplicateSuggestionCount();
   const showCreate = params?.showCreate === "1";
 
   return (
@@ -30,6 +32,15 @@ export default async function AccountsPage({ searchParams }: PageProps) {
         <div className="flex flex-wrap items-center gap-2">
           <ExportLinks entity="accounts" label="Accounts" params={{ q: params?.q, stage: params?.stage }} />
           <ExportLinks entity="contacts" label="Contacts" />
+          {duplicateCount > 0 && (
+            <Link
+              className="inline-flex h-10 items-center rounded-md border border-amber-200 bg-amber-50 px-3 text-sm font-medium text-amber-900"
+              href="/duplicates"
+            >
+              Review {duplicateCount} possible duplicate
+              {duplicateCount === 1 ? "" : "s"}
+            </Link>
+          )}
           <Link
             className="inline-flex h-10 items-center gap-2 rounded-md bg-ink px-3 text-sm font-medium text-white"
             href={showCreate ? "/accounts" : "/accounts?showCreate=1"}

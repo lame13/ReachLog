@@ -16,6 +16,7 @@ import {
   parseStoredLinks
 } from "@/modules/contacts/queries";
 import { recheckContactEmailAction } from "@/modules/emailVerification/actions";
+import { getContactOpportunityRoles } from "@/modules/opportunities/contacts";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -32,6 +33,7 @@ export default async function ContactDetailPage({ params }: PageProps) {
   const { contact, targets, forms, timeline } = detail;
   const accounts = getAccountOptions();
   const links = parseStoredLinks(contact.linksJson);
+  const opportunityRoles = getContactOpportunityRoles(contact.id);
 
   return (
     <>
@@ -169,6 +171,39 @@ export default async function ContactDetailPage({ params }: PageProps) {
                   Recheck email
                 </button>
               </form>
+            </div>
+          </section>
+
+          <section className="rounded-lg border border-line bg-white shadow-sm">
+            <div className="border-b border-line px-4 py-3">
+              <h2 className="font-semibold">Opportunity roles</h2>
+            </div>
+            <div className="divide-y divide-line">
+              {opportunityRoles.length ? (
+                opportunityRoles.map((opportunity) => (
+                  <div
+                    className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm"
+                    key={`${opportunity.targetId}-${opportunity.role}`}
+                  >
+                    <div>
+                      <Link
+                        className="font-medium hover:underline"
+                        href={`/targets/${opportunity.targetId}`}
+                      >
+                        {opportunity.companyName}
+                      </Link>
+                      <div className="mt-1 text-xs text-muted">
+                        {opportunity.role}
+                      </div>
+                    </div>
+                    <StagePill stage={opportunity.stage} />
+                  </div>
+                ))
+              ) : (
+                <div className="px-4 py-3 text-sm text-muted">
+                  No additional opportunity roles.
+                </div>
+              )}
             </div>
           </section>
 

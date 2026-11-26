@@ -6,6 +6,7 @@ import { formatDateTime, timeAgo } from "@/modules/core/dates";
 import { getAccountOptions } from "@/modules/accounts/queries";
 import { createContactAction } from "@/modules/contacts/actions";
 import { getContactFilterOptions, getContacts } from "@/modules/contacts/queries";
+import { getDuplicateSuggestionCount } from "@/modules/duplicates/queries";
 
 type PageProps = {
   searchParams?: Promise<{
@@ -27,6 +28,7 @@ export default async function ContactsPage({ searchParams }: PageProps) {
   });
   const filterOptions = getContactFilterOptions();
   const accounts = getAccountOptions();
+  const duplicateCount = getDuplicateSuggestionCount();
   const showCreate = params?.showCreate === "1";
 
   return (
@@ -45,6 +47,15 @@ export default async function ContactsPage({ searchParams }: PageProps) {
             params={{ q: params?.q, domain: params?.domain, accountId: params?.accountId, tag: params?.tag }}
           />
           <ExportLinks entity="accounts" label="Accounts" />
+          {duplicateCount > 0 && (
+            <Link
+              className="inline-flex h-10 items-center rounded-md border border-amber-200 bg-amber-50 px-3 text-sm font-medium text-amber-900"
+              href="/duplicates"
+            >
+              Review {duplicateCount} possible duplicate
+              {duplicateCount === 1 ? "" : "s"}
+            </Link>
+          )}
           <Link
             className="inline-flex h-10 items-center gap-2 rounded-md bg-ink px-3 text-sm font-medium text-white"
             href={showCreate ? "/contacts" : "/contacts?showCreate=1"}

@@ -10,9 +10,9 @@ export const scheduleDefinitions: Record<
       "Import sent messages and replies from your selected mailboxes.",
   },
   "followup-check": {
-    title: "Follow-up reminders",
+    title: "Follow-up and stale reminders",
     description:
-      "Send Telegram reminders for due follow-ups. AI follow-up sending is controlled separately.",
+      "Send Telegram reminders for due follow-ups and opportunities with no next step. AI sending is controlled separately.",
   },
   ai: {
     title: "AI automation",

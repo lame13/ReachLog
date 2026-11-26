@@ -1,5 +1,39 @@
 # Changelog
 
+## 1.2.0 — 2026-11-26
+
+ReachLog 1.2.0 adds the relationship context and cleanup tools that matter as a
+small pipeline grows, while keeping the everyday Today workflow unchanged.
+
+### Added
+
+- Optional **People** on an opportunity, with one primary contact and additional
+  people marked as decision maker, champion, user, finance, blocker or another
+  stakeholder.
+- A **Possible duplicates** review for accounts with matching normalized names
+  and contacts with matching names in the same account.
+- Explicit, confirmed account and contact merging that moves targets, threads,
+  roles, notes, tags, links and timeline events to the record being kept.
+- A single batched Telegram reminder for stale opportunities with no next step.
+  Reminders use the existing follow-up background task and do not repeat until
+  the opportunity has new activity or becomes stale again.
+- Contact pages show every additional opportunity role held by that person.
+
+### Changed
+
+- The follow-up background task is now described as **Follow-up and stale
+  reminders**. Turning off Telegram leaves both kinds of reminder visible in
+  Today and Follow-ups.
+- Duplicate records are never merged without an explicit review and browser
+  confirmation.
+
+### Upgrade
+
+- Migration 0011 adds opportunity stakeholder roles.
+- Migration 0012 records stale-reminder delivery.
+- Existing primary contacts, targets, threads, messages and follow-ups are
+  unchanged. New relationship and cleanup features are optional.
+
 ## 1.1.0 — 2026-11-26
 
 ReachLog 1.1.0 makes the pipeline operational. Each target now has a simple

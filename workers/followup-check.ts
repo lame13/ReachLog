@@ -2,8 +2,9 @@ import { env } from "../src/modules/core/env";
 import { getSqlite } from "../src/modules/core/db/client";
 import { withWorkerLock } from "../src/modules/core/db/locks";
 import { createId } from "../src/modules/core/ids";
-import { targetUrl } from "../src/modules/core/urls";
+import { appUrl, targetUrl } from "../src/modules/core/urls";
 import { notifyWorkerFailure } from "../src/modules/core/worker-alerts";
+import { findStaleOpportunities } from "../src/modules/opportunities/stale";
 import { sendTelegramMessage } from "../src/modules/telegram/notify";
 
 type DueFollowup = {
@@ -45,10 +46,15 @@ async function checkFollowups() {
     `
     )
     .all(now) as DueFollowup[];
+  const staleOpportunities = findStaleOpportunities({
+    sqlite,
+    days: env.STALE_DEAL_DAYS,
+    limit: 50
+  });
 
   if (!env.TELEGRAM_ENABLED) {
     console.log(
-      `followup-check: ${dueFollowups.length} due, Telegram disabled; due follow-ups stay visible in the app`
+      `followup-check: ${dueFollowups.length} follow-ups due, ${staleOpportunities.length} stale opportunities; Telegram disabled, so both stay visible in the app`
     );
     return;
   }
@@ -85,8 +91,53 @@ async function checkFollowups() {
       );
   }
 
-  console.log(`followup-check: ${dueFollowups.length} due`);
-  if (failed) throw new Error(`${failed} follow-up notifications failed. Check the Telegram connection.`);
+  if (staleOpportunities.length) {
+    const visible = staleOpportunities.slice(0, 5);
+    const remaining = staleOpportunities.length - visible.length;
+    const text = [
+      `${staleOpportunities.length} opportunities need a next step:`,
+      ...visible.map((opportunity) => `- ${opportunity.companyName}`),
+      remaining > 0 ? `and ${remaining} more` : null,
+      appUrl("/dashboard")
+    ]
+      .filter(Boolean)
+      .join("\n");
+    const result = await sendTelegramMessage(text);
+
+    if (result.sent) {
+      sqlite.transaction(() => {
+        const markNotified = sqlite.prepare(
+          "UPDATE targets SET stale_notified_at = ? WHERE id = ?"
+        );
+        const recordReminder = sqlite.prepare(
+          "INSERT INTO events (id, entity_type, entity_id, event_type, payload_json, created_at) VALUES (?, 'target', ?, 'stale_opportunity_reminder', ?, ?)"
+        );
+
+        for (const opportunity of staleOpportunities) {
+          markNotified.run(now, opportunity.targetId);
+          recordReminder.run(
+            createId("event"),
+            opportunity.targetId,
+            JSON.stringify({
+              staleDays: env.STALE_DEAL_DAYS,
+              batchSize: staleOpportunities.length
+            }),
+            now
+          );
+        }
+      })();
+    } else {
+      failed++;
+    }
+  }
+
+  console.log(
+    `followup-check: ${dueFollowups.length} follow-ups due, ${staleOpportunities.length} stale opportunities`
+  );
+  if (failed)
+    throw new Error(
+      `${failed} follow-up or stale-opportunity notifications failed. Check the Telegram connection.`
+    );
 }
 
 main().catch(async (error) => {

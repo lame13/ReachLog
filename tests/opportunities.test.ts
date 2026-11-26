@@ -24,7 +24,7 @@ async function runAction(
   }
 }
 
-test("1.1 opportunity workflow", async (t) => {
+test("opportunity and relationship workflow", async (t) => {
   const directory = mkdtempSync(path.join(tmpdir(), "reachlog-opportunity-"));
   for (const key of Object.keys(process.env)) {
     if (
@@ -52,6 +52,15 @@ test("1.1 opportunity workflow", async (t) => {
   const queries = await import("../src/modules/outreach/queries");
   const pipeline = await import("../src/modules/pipeline/queries");
   const pipelineActions = await import("../src/modules/pipeline/actions");
+  const contactActions = await import(
+    "../src/modules/opportunities/contact-actions"
+  );
+  const opportunityContacts = await import(
+    "../src/modules/opportunities/contacts"
+  );
+  const duplicateQueries = await import("../src/modules/duplicates/queries");
+  const duplicateActions = await import("../src/modules/duplicates/actions");
+  const stale = await import("../src/modules/opportunities/stale");
   const { getExportRows } = await import("../src/modules/export/data");
   const sqlite = getSqlite();
 
@@ -93,7 +102,7 @@ test("1.1 opportunity workflow", async (t) => {
       (
         sqlite
           .prepare(
-            "SELECT COUNT(*) AS count FROM schema_migrations WHERE version = '0010'"
+            "SELECT COUNT(*) AS count FROM schema_migrations WHERE version = '0012'"
           )
           .get() as { count: number }
       ).count,
@@ -244,5 +253,178 @@ test("1.1 opportunity workflow", async (t) => {
       .get() as { closedAt: string | null; stage: string };
     assert.equal(closed.stage, "lost");
     assert.ok(closed.closedAt);
+  });
+
+  await t.test("additional opportunity people keep clear roles", async () => {
+    sqlite
+      .prepare(
+        `
+        INSERT INTO contacts (
+          id, account_id, name, email, domain, title, created_at, updated_at
+        )
+        VALUES (
+          'c-finance', 'a1', 'Pim', 'pim@northstar.example',
+          'northstar.example', 'Finance lead', ?, ?
+        )
+      `
+      )
+      .run(now, now);
+
+    await runAction(contactActions.addOpportunityContactAction, {
+      targetId: "t1",
+      contactId: "c-finance",
+      role: "Finance"
+    });
+    assert.deepEqual(
+      opportunityContacts
+        .getTargetAdditionalContacts("t1")
+        .map((contact) => [contact.contactId, contact.role]),
+      [["c-finance", "Finance"]]
+    );
+    assert.equal(
+      opportunityContacts.getContactOpportunityRoles("c-finance")[0]?.targetId,
+      "t1"
+    );
+
+    const assignment = sqlite
+      .prepare(
+        "SELECT id FROM target_contacts WHERE target_id = 't1' AND contact_id = 'c-finance'"
+      )
+      .get() as { id: string };
+    await runAction(contactActions.removeOpportunityContactAction, {
+      targetId: "t1",
+      id: assignment.id
+    });
+    assert.equal(opportunityContacts.getTargetAdditionalContacts("t1").length, 0);
+  });
+
+  await t.test("duplicate suggestions require a review and merge safely", async () => {
+    sqlite
+      .prepare(
+        `
+        INSERT INTO accounts (
+          id, name, domain, dedupe_key, notes, created_at, updated_at
+        )
+        VALUES (
+          'a-duplicate', 'Northstar LLC', NULL, 'name:northstar llc',
+          'Second account note', ?, ?
+        )
+      `
+      )
+      .run(now, now);
+    sqlite
+      .prepare(
+        `
+        INSERT INTO targets (
+          id, account_id, company_name, source_type, dedupe_key, status,
+          stage, created_at, updated_at
+        )
+        VALUES (
+          't-duplicate', 'a-duplicate', 'Northstar LLC', 'manual',
+          'duplicate-target', 'new', 'new', ?, ?
+        )
+      `
+      )
+      .run(now, now);
+    sqlite
+      .prepare(
+        `
+        INSERT INTO contacts (
+          id, account_id, name, email, domain, created_at, updated_at
+        )
+        VALUES (
+          'c-mina-duplicate', 'a1', 'Mina', 'mina.alt@northstar.example',
+          'northstar.example', ?, ?
+        )
+      `
+      )
+      .run(now, now);
+
+    const suggestions = duplicateQueries.getDuplicateSuggestions();
+    assert.ok(
+      suggestions.accounts.some(
+        (row) => row.merge.id === "a-duplicate" && row.keep.id === "a1"
+      )
+    );
+    assert.ok(
+      suggestions.contacts.some(
+        (row) =>
+          row.merge.id === "c-mina-duplicate" && row.keep.id === "c1"
+      )
+    );
+
+    await runAction(duplicateActions.mergeAccountsAction, {
+      keepId: "a1",
+      mergeId: "a-duplicate"
+    });
+    assert.equal(
+      (
+        sqlite
+          .prepare("SELECT account_id AS accountId FROM targets WHERE id = 't-duplicate'")
+          .get() as { accountId: string }
+      ).accountId,
+      "a1"
+    );
+    assert.equal(
+      (
+        sqlite
+          .prepare(
+            "SELECT COUNT(*) AS count FROM accounts WHERE id = 'a-duplicate'"
+          )
+          .get() as { count: number }
+      ).count,
+      0
+    );
+
+    await runAction(duplicateActions.mergeContactsAction, {
+      keepId: "c1",
+      mergeId: "c-mina-duplicate"
+    });
+    assert.equal(
+      (
+        sqlite
+          .prepare(
+            "SELECT COUNT(*) AS count FROM contacts WHERE id = 'c-mina-duplicate'"
+          )
+          .get() as { count: number }
+      ).count,
+      0
+    );
+    assert.deepEqual(sqlite.pragma("foreign_key_check"), []);
+  });
+
+  await t.test("stale opportunities are batched once per activity period", () => {
+    const old = new Date(Date.now() - 20 * 86_400_000).toISOString();
+    sqlite
+      .prepare(
+        `
+        INSERT INTO targets (
+          id, account_id, company_name, source_type, dedupe_key, status,
+          stage, created_at, updated_at
+        )
+        VALUES (
+          't-stale', 'a1', 'Quiet Co', 'manual', 'quiet-co', 'waiting',
+          'contacted', ?, ?
+        )
+      `
+      )
+      .run(old, old);
+
+    const found = stale.findStaleOpportunities({
+      sqlite,
+      days: 14,
+      now: new Date()
+    });
+    assert.ok(found.some((row) => row.targetId === "t-stale"));
+
+    sqlite
+      .prepare("UPDATE targets SET stale_notified_at = ? WHERE id = 't-stale'")
+      .run(found.find((row) => row.targetId === "t-stale")?.activityAt);
+    assert.equal(
+      stale
+        .findStaleOpportunities({ sqlite, days: 14 })
+        .some((row) => row.targetId === "t-stale"),
+      false
+    );
   });
 });

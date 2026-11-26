@@ -7,7 +7,8 @@ import {
   FileText,
   Mail,
   RefreshCw,
-  Send
+  Send,
+  Users
 } from "lucide-react";
 import { SendEmailModal } from "@/components/send-email-modal";
 import { StageMoveForm } from "@/components/stage-move-form";
@@ -42,6 +43,15 @@ import {
   formatMoney,
   normalizeCurrency
 } from "@/modules/opportunities/value";
+import {
+  addOpportunityContactAction,
+  removeOpportunityContactAction
+} from "@/modules/opportunities/contact-actions";
+import {
+  contactRoleOptions,
+  getAvailableContactsForTarget,
+  getTargetAdditionalContacts
+} from "@/modules/opportunities/contacts";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -69,6 +79,8 @@ export default async function TargetDetailPage({
   const { target, threads, messages, followups, forms } = detail;
   const timeline = getTimeline({ targetIds: [target.id] });
   const aiReview = getLatestTargetAiReview(target.id);
+  const additionalContacts = getTargetAdditionalContacts(target.id);
+  const availableContacts = getAvailableContactsForTarget(target.id);
   const tomorrow = getDateInputValue(1);
   const nextOpenFollowup = followups
     .filter((followup) => followup.status === "open")
@@ -295,6 +307,111 @@ export default async function TargetDetailPage({
                 )}
               </div>
             </form>
+          </section>
+
+          <section className="rounded-lg border border-line bg-white shadow-sm">
+            <div className="flex items-center gap-2 border-b border-line px-4 py-3">
+              <Users className="size-4 text-muted" aria-hidden="true" />
+              <h2 className="font-semibold">People</h2>
+            </div>
+            <div className="divide-y divide-line">
+              <div className="flex items-start justify-between gap-3 px-4 py-3 text-sm">
+                <div>
+                  {target.contactId ? (
+                    <Link
+                      className="font-medium hover:underline"
+                      href={`/contacts/${target.contactId}`}
+                    >
+                      {target.contactName ?? target.contactEmail}
+                    </Link>
+                  ) : (
+                    <span className="font-medium">No primary contact</span>
+                  )}
+                  <div className="mt-1 text-xs text-muted">
+                    {target.contactEmail ?? "No email"}
+                  </div>
+                </div>
+                <span className="rounded-full border border-line bg-panel px-2 py-1 text-xs font-medium text-muted">
+                  Primary
+                </span>
+              </div>
+              {additionalContacts.map((contact) => (
+                <div
+                  className="flex items-start justify-between gap-3 px-4 py-3 text-sm"
+                  key={contact.id}
+                >
+                  <div>
+                    <Link
+                      className="font-medium hover:underline"
+                      href={`/contacts/${contact.contactId}`}
+                    >
+                      {contact.name}
+                    </Link>
+                    <div className="mt-1 text-xs text-muted">
+                      {contact.email}
+                      {contact.title ? ` · ${contact.title}` : ""}
+                    </div>
+                    <div className="mt-1 text-xs font-medium text-accent">
+                      {contact.role}
+                    </div>
+                  </div>
+                  <form action={removeOpportunityContactAction}>
+                    <input name="id" type="hidden" value={contact.id} />
+                    <input name="targetId" type="hidden" value={target.id} />
+                    <button className="text-xs font-medium text-muted hover:text-rose-700">
+                      Remove
+                    </button>
+                  </form>
+                </div>
+              ))}
+            </div>
+            {availableContacts.length > 0 && (
+              <form
+                action={addOpportunityContactAction}
+                className="space-y-3 border-t border-line p-4"
+              >
+                <input name="targetId" type="hidden" value={target.id} />
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium text-muted">
+                    Add another person
+                  </span>
+                  <select
+                    className="h-9 w-full rounded-md border border-line bg-white px-2 text-sm outline-none focus:border-accent"
+                    defaultValue=""
+                    name="contactId"
+                    required
+                  >
+                    <option value="" disabled>
+                      Choose a contact
+                    </option>
+                    {availableContacts.map((contact) => (
+                      <option key={contact.id} value={contact.id}>
+                        {contact.name} · {contact.email}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium text-muted">
+                    Their role
+                  </span>
+                  <select
+                    className="h-9 w-full rounded-md border border-line bg-white px-2 text-sm outline-none focus:border-accent"
+                    defaultValue="Stakeholder"
+                    name="role"
+                  >
+                    {contactRoleOptions.map((role) => (
+                      <option key={role} value={role}>
+                        {role}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button className="h-9 rounded-md border border-line px-3 text-xs font-medium hover:bg-panel">
+                  Add person
+                </button>
+              </form>
+            )}
           </section>
 
           {aiReview && (

@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS targets (
   next_step_at TEXT,
   lost_reason TEXT,
   closed_at TEXT,
+  stale_notified_at TEXT,
   do_not_resend INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
@@ -72,6 +73,19 @@ CREATE TABLE IF NOT EXISTS targets (
 CREATE UNIQUE INDEX IF NOT EXISTS targets_dedupe_key_unique ON targets(dedupe_key);
 CREATE INDEX IF NOT EXISTS targets_contact_idx ON targets(contact_id);
 CREATE INDEX IF NOT EXISTS targets_status_idx ON targets(status);
+
+CREATE TABLE IF NOT EXISTS target_contacts (
+  id TEXT PRIMARY KEY,
+  target_id TEXT NOT NULL REFERENCES targets(id) ON DELETE CASCADE,
+  contact_id TEXT NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+  role TEXT NOT NULL DEFAULT 'Stakeholder',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS target_contacts_identity_unique
+  ON target_contacts(target_id, contact_id);
+CREATE INDEX IF NOT EXISTS target_contacts_target_idx ON target_contacts(target_id);
+CREATE INDEX IF NOT EXISTS target_contacts_contact_idx ON target_contacts(contact_id);
 
 CREATE TABLE IF NOT EXISTS email_drafts (
   target_id TEXT PRIMARY KEY REFERENCES targets(id) ON DELETE CASCADE,
@@ -267,6 +281,7 @@ export function bootstrapDatabase(sqlite: SqliteDatabase) {
 
   ensureAiAutomationSchema(sqlite);
   ensureOpportunityColumns(sqlite);
+  ensureOpportunityRelationshipsSchema(sqlite);
   applyAccountsAndPipelineMigration(sqlite, upgradeToAccounts);
 
   const seeded = sqlite
@@ -338,6 +353,37 @@ function ensureOpportunityColumns(sqlite: SqliteDatabase) {
     CREATE INDEX IF NOT EXISTS targets_expected_close_idx ON targets(expected_close_date);
   `);
   recordSchemaVersion(sqlite, "0010", "opportunity_value_and_next_step");
+}
+
+/**
+ * 0011 adds optional stakeholders to an opportunity. The target's existing
+ * contact remains primary, so mail matching and send safeguards stay stable.
+ * 0012 records the last batched stale-opportunity reminder.
+ */
+function ensureOpportunityRelationshipsSchema(sqlite: SqliteDatabase) {
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS target_contacts (
+      id TEXT PRIMARY KEY,
+      target_id TEXT NOT NULL REFERENCES targets(id) ON DELETE CASCADE,
+      contact_id TEXT NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+      role TEXT NOT NULL DEFAULT 'Stakeholder',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS target_contacts_identity_unique
+      ON target_contacts(target_id, contact_id);
+    CREATE INDEX IF NOT EXISTS target_contacts_target_idx
+      ON target_contacts(target_id);
+    CREATE INDEX IF NOT EXISTS target_contacts_contact_idx
+      ON target_contacts(contact_id);
+  `);
+
+  if (!tableHasColumn(sqlite, "targets", "stale_notified_at")) {
+    sqlite.exec("ALTER TABLE targets ADD COLUMN stale_notified_at TEXT");
+  }
+
+  recordSchemaVersion(sqlite, "0011", "opportunity_stakeholders");
+  recordSchemaVersion(sqlite, "0012", "stale_opportunity_reminders");
 }
 
 /**

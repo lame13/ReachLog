@@ -74,6 +74,7 @@ export const targets = sqliteTable(
     nextStepAt: text("next_step_at"),
     lostReason: text("lost_reason"),
     closedAt: text("closed_at"),
+    staleNotifiedAt: text("stale_notified_at"),
     doNotResend: integer("do_not_resend", { mode: "boolean" })
       .notNull()
       .default(false),
@@ -92,6 +93,30 @@ export const targets = sqliteTable(
     expectedCloseIdx: index("targets_expected_close_idx").on(
       table.expectedCloseDate
     )
+  })
+);
+
+export const targetContacts = sqliteTable(
+  "target_contacts",
+  {
+    id: text("id").primaryKey(),
+    targetId: text("target_id")
+      .notNull()
+      .references(() => targets.id, { onDelete: "cascade" }),
+    contactId: text("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    role: text("role").notNull().default("Stakeholder"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull()
+  },
+  (table) => ({
+    identityUnique: uniqueIndex("target_contacts_identity_unique").on(
+      table.targetId,
+      table.contactId
+    ),
+    targetIdx: index("target_contacts_target_idx").on(table.targetId),
+    contactIdx: index("target_contacts_contact_idx").on(table.contactId)
   })
 );
 
@@ -383,7 +408,8 @@ export const contactsRelations = relations(contacts, ({ one, many }) => ({
     references: [accounts.id]
   }),
   targets: many(targets),
-  threads: many(threads)
+  threads: many(threads),
+  opportunityRoles: many(targetContacts)
 }));
 
 export const targetsRelations = relations(targets, ({ one, many }) => ({
@@ -397,8 +423,23 @@ export const targetsRelations = relations(targets, ({ one, many }) => ({
   }),
   threads: many(threads),
   followups: many(followupTasks),
-  contactForms: many(contactFormSubmissions)
+  contactForms: many(contactFormSubmissions),
+  additionalContacts: many(targetContacts)
 }));
+
+export const targetContactsRelations = relations(
+  targetContacts,
+  ({ one }) => ({
+    target: one(targets, {
+      fields: [targetContacts.targetId],
+      references: [targets.id]
+    }),
+    contact: one(contacts, {
+      fields: [targetContacts.contactId],
+      references: [contacts.id]
+    })
+  })
+);
 
 export const threadsRelations = relations(threads, ({ one, many }) => ({
   target: one(targets, {

@@ -73,7 +73,7 @@ export function BackgroundSettings({
             blocker={blockers[schedule.name]}
             hint={
               schedule.name === "followup-check" && !remindersAvailable
-                ? "Without Telegram, due follow-ups still appear in ReachLog: the Follow-ups queue lists them and the sidebar shows a count."
+                ? "Without Telegram, due follow-ups and stale opportunities still appear in Today and Follow-ups."
                 : schedule.name === "ai"
                   ? "Suggestions that need a decision appear under AI review. Auto-sending stays off unless you enable it in the AI connection."
                   : null
