@@ -114,7 +114,7 @@ async function checkFollowups() {
         );
 
         for (const opportunity of staleOpportunities) {
-          markNotified.run(now, opportunity.targetId);
+          markNotified.run(opportunity.activityAt, opportunity.targetId);
           recordReminder.run(
             createId("event"),
             opportunity.targetId,

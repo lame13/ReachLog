@@ -19,6 +19,7 @@ export function formatDate(value: string | null | undefined) {
   return new Intl.DateTimeFormat("en", {
     month: "short",
     day: "numeric",
+    timeZone: /^\d{4}-\d{2}-\d{2}$/.test(value) ? "UTC" : undefined,
     year: "numeric"
   }).format(new Date(value));
 }

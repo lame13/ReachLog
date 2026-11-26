@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.2.1 — 2026-11-26
+
+### Fixed
+
+- Duplicate review lets you keep either record. Contact merges preserve the kept email's verification and keep primary and additional roles distinct. Duplicate suggestions now distinguish names written in non-Latin scripts.
+- All eligible contacts appear in the opportunity's stakeholder picker, including entries past the first 200.
+- Today and Telegram recognize next steps saved without a due date. Today also shows pending AI reviews before the first target is created and keeps the newest reply when several threads belong to one target.
+- Pipeline totals include every currency and show explicitly entered zero values. Invalid deal values no longer clear the saved amount. Expected close dates display on the entered calendar day across time zones.
+- Closing an opportunity through AI review or the do-not-resend action records the close date. Accepted closures and CSV imports no longer queue follow-ups for closed opportunities. An outdated follow-up action cannot mark a target lost after its reminder has been closed.
+
 ## 1.2.0 — 2026-11-26
 
 ReachLog 1.2.0 adds the relationship context and cleanup tools that matter as a

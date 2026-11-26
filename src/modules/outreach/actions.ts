@@ -23,6 +23,7 @@ import {
 import {
   stageFromLegacyStatus,
   isPipelineStage,
+  isOpenPipelineStage,
   statusForStageMove
 } from "@/modules/pipeline/stages";
 import {
@@ -81,6 +82,7 @@ export async function createTargetAction(formData: FormData) {
   }
 
   const targetId = createId("target");
+  const stage = isPipelineStage(values.stage) ? values.stage : stageFromLegacyStatus(values.status);
 
   let contactIdToVerify: string | null = null;
 
@@ -124,14 +126,14 @@ export async function createTargetAction(formData: FormData) {
         values.sourceUrl || null,
         dedupeKey,
         values.status || "new",
-        isPipelineStage(values.stage) ? values.stage : stageFromLegacyStatus(values.status),
+        stage,
         values.valueCents,
         values.currency,
         values.expectedCloseDate || null,
         values.nextStep || null,
         values.nextStep ? values.nextStepAt : null,
-        values.lostReason || null,
-        ["won", "lost"].includes(values.stage) ? now : null,
+        stage === "lost" ? values.lostReason || null : null,
+        isOpenPipelineStage(stage) ? null : now,
         values.doNotResend ? 1 : 0,
         now,
         now
@@ -146,7 +148,7 @@ export async function createTargetAction(formData: FormData) {
         sourceType: values.sourceType,
         sourceUrl: values.sourceUrl || null,
         accountId,
-        stage: isPipelineStage(values.stage) ? values.stage : stageFromLegacyStatus(values.status)
+        stage
       }
     });
   });
@@ -199,7 +201,6 @@ export async function updateTargetAction(formData: FormData) {
 
   let contactIdToVerify: string | null = null;
   const nextFollowupAt = getNextFollowupIso(values);
-  const nextStage = isPipelineStage(values.stage) ? values.stage : null;
   const currentTarget = sqlite
     .prepare("SELECT stage, status, closed_at as closedAt FROM targets WHERE id = ?")
     .get(targetId) as
@@ -210,15 +211,16 @@ export async function updateTargetAction(formData: FormData) {
     return;
   }
 
+  const nextStage = isPipelineStage(values.stage) ? values.stage : currentTarget.stage;
   // Changing the stage carries the outreach status with it, unless the status
   // field was edited by hand in the same save.
   const nextStatus =
-    nextStage && nextStage !== currentTarget.stage && values.status === currentTarget.status
+    nextStage !== currentTarget.stage && values.status === currentTarget.status
       ? statusForStageMove(currentTarget.status, nextStage, values.doNotResend)
       : values.status || "new";
   const nextClosedAt =
     nextStage === "won" || nextStage === "lost"
-      ? currentTarget.closedAt ?? now
+      ? currentTarget.closedAt ?? (nextStage !== currentTarget.stage ? now : null)
       : null;
 
   const transaction = sqlite.transaction(() => {
@@ -251,7 +253,7 @@ export async function updateTargetAction(formData: FormData) {
             source_url = ?,
             dedupe_key = ?,
             status = ?,
-            stage = COALESCE(?, stage),
+            stage = ?,
             value_cents = ?,
             currency = ?,
             expected_close_date = ?,
@@ -285,6 +287,9 @@ export async function updateTargetAction(formData: FormData) {
         now,
         targetId
       );
+
+    sqlite.prepare("DELETE FROM target_contacts WHERE target_id = ? AND contact_id = ?")
+      .run(targetId, contactId);
 
     const targetHardBlocked =
       nextStage === "lost" ||
@@ -379,7 +384,7 @@ export async function updateTargetAction(formData: FormData) {
         dedupeKey,
         sourceType: values.sourceType,
         status: nextStatus,
-        stage: nextStage ?? currentTarget.stage,
+        stage: nextStage,
         doNotResend: values.doNotResend,
         replyType: values.replyType || null,
         nextFollowupAt,
@@ -411,9 +416,9 @@ export async function updateDoNotResendAction(formData: FormData) {
     if (enabled) {
       sqlite
         .prepare(
-          "UPDATE targets SET do_not_resend = 1, status = 'dead', stage = 'lost', updated_at = ? WHERE id = ?"
+          "UPDATE targets SET do_not_resend = 1, status = 'dead', stage = 'lost', closed_at = COALESCE(closed_at, ?), updated_at = ? WHERE id = ?"
         )
-        .run(now, targetId);
+        .run(now, now, targetId);
 
       cancelledFollowups = sqlite
         .prepare(
@@ -463,6 +468,10 @@ export async function addTargetNoteAction(formData: FormData) {
 }
 
 function getTargetFormValues(formData: FormData): TargetFormValues {
+  const valueCents = parseDealValueToCents(formData.get("dealValue"));
+  if (valueCents === undefined) {
+    throw new Error("Enter a deal value from 0 to 1,000,000,000 with up to two decimal places.");
+  }
   return {
     targetId: clean(formData.get("targetId")),
     contactId: clean(formData.get("contactId")),
@@ -475,7 +484,7 @@ function getTargetFormValues(formData: FormData): TargetFormValues {
     dedupeKey: clean(formData.get("dedupeKey")),
     status: clean(formData.get("status")) || "new",
     stage: clean(formData.get("stage")),
-    valueCents: parseDealValueToCents(formData.get("dealValue")) ?? null,
+    valueCents,
     currency: normalizeCurrency(clean(formData.get("currency"))),
     expectedCloseDate: normalizeDateInput(clean(formData.get("expectedCloseDate"))),
     nextStep: clean(formData.get("nextStep")),

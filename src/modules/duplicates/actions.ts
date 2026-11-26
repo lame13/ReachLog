@@ -10,7 +10,6 @@ import {
   serializeLinks
 } from "@/modules/contacts/queries";
 import { getSqlite } from "@/modules/core/db/client";
-import { createId } from "@/modules/core/ids";
 import { recordEvent } from "@/modules/timeline/record";
 
 export async function mergeAccountsAction(formData: FormData) {
@@ -22,26 +21,26 @@ export async function mergeAccountsAction(formData: FormData) {
   }
 
   const sqlite = getSqlite();
-  const keep = getAccount(keepId);
-  const merge = getAccount(mergeId);
-
-  if (!keep || !merge) {
-    return;
-  }
-
-  const domain = keep.domain ?? merge.domain;
-  const dedupeKey = accountDedupeKey({ name: keep.name, domain });
-  const conflict = sqlite
-    .prepare(
-      "SELECT id FROM accounts WHERE dedupe_key = ? AND id NOT IN (?, ?)"
-    )
-    .get(dedupeKey, keepId, mergeId) as { id: string } | undefined;
-
-  if (conflict) {
-    return;
-  }
-
   sqlite.transaction(() => {
+    const keep = getAccount(keepId);
+    const merge = getAccount(mergeId);
+
+    if (!keep || !merge) {
+      return;
+    }
+
+    const domain = keep.domain ?? merge.domain;
+    const dedupeKey = accountDedupeKey({ name: keep.name, domain });
+    const conflict = sqlite
+      .prepare(
+        "SELECT id FROM accounts WHERE dedupe_key = ? AND id NOT IN (?, ?)"
+      )
+      .get(dedupeKey, keepId, mergeId) as { id: string } | undefined;
+
+    if (conflict) {
+      return;
+    }
+
     sqlite
       .prepare("UPDATE contacts SET account_id = ?, updated_at = ? WHERE account_id = ?")
       .run(keepId, new Date().toISOString(), mergeId);
@@ -82,7 +81,7 @@ export async function mergeAccountsAction(formData: FormData) {
         mergedAccountName: merge.name
       }
     });
-  })();
+  }).immediate();
 
   revalidateDuplicatePaths();
 }
@@ -96,61 +95,35 @@ export async function mergeContactsAction(formData: FormData) {
   }
 
   const sqlite = getSqlite();
-  const keep = getContact(keepId);
-  const merge = getContact(mergeId);
-
-  if (!keep || !merge) {
-    return;
-  }
-
-  const now = new Date().toISOString();
-
   sqlite.transaction(() => {
+    const keep = getContact(keepId);
+    const merge = getContact(mergeId);
+
+    if (!keep || !merge) {
+      return;
+    }
+
+    const now = new Date().toISOString();
+
     sqlite
       .prepare("UPDATE targets SET contact_id = ?, updated_at = ? WHERE contact_id = ?")
       .run(keepId, now, mergeId);
     sqlite
       .prepare("UPDATE threads SET contact_id = ?, updated_at = ? WHERE contact_id = ?")
       .run(keepId, now, mergeId);
+    // Keep the existing assignment when both contacts have a role on the same target.
+    sqlite
+      .prepare("UPDATE OR IGNORE target_contacts SET contact_id = ?, updated_at = ? WHERE contact_id = ?")
+      .run(keepId, now, mergeId);
     sqlite
       .prepare(
         `
         DELETE FROM target_contacts
         WHERE contact_id = ?
-          AND target_id IN (
-            SELECT id FROM targets WHERE contact_id = ?
-          )
+          AND target_id IN (SELECT id FROM targets WHERE contact_id = ?)
       `
       )
       .run(keepId, keepId);
-
-    const roles = sqlite
-      .prepare(
-        "SELECT target_id as targetId, role FROM target_contacts WHERE contact_id = ?"
-      )
-      .all(mergeId) as Array<{ targetId: string; role: string }>;
-
-    for (const role of roles) {
-      sqlite
-        .prepare(
-          `
-          INSERT INTO target_contacts (
-            id, target_id, contact_id, role, created_at, updated_at
-          )
-          VALUES (?, ?, ?, ?, ?, ?)
-          ON CONFLICT(target_id, contact_id) DO NOTHING
-        `
-        )
-        .run(
-          createId("target_contact"),
-          role.targetId,
-          keepId,
-          role.role,
-          now,
-          now
-        );
-    }
-
     sqlite
       .prepare("DELETE FROM target_contacts WHERE contact_id = ?")
       .run(mergeId);
@@ -169,9 +142,6 @@ export async function mergeContactsAction(formData: FormData) {
             links_json = ?,
             tags = ?,
             notes = ?,
-            email_verification_provider = COALESCE(email_verification_provider, ?),
-            email_verification_status = COALESCE(email_verification_status, ?),
-            email_verification_checked_at = COALESCE(email_verification_checked_at, ?),
             updated_at = ?
         WHERE id = ?
       `
@@ -190,9 +160,6 @@ export async function mergeContactsAction(formData: FormData) {
         ),
         mergeTags(keep.tags, merge.tags),
         mergeNotes(keep.notes, merge.notes),
-        merge.emailVerificationProvider,
-        merge.emailVerificationStatus,
-        merge.emailVerificationCheckedAt,
         now,
         keepId
       );
@@ -206,7 +173,7 @@ export async function mergeContactsAction(formData: FormData) {
         mergedContactEmail: merge.email
       }
     });
-  })();
+  }).immediate();
 
   revalidateDuplicatePaths();
 }
@@ -247,10 +214,7 @@ function getContact(id: string) {
         phone,
         links_json as linksJson,
         tags,
-        notes,
-        email_verification_provider as emailVerificationProvider,
-        email_verification_status as emailVerificationStatus,
-        email_verification_checked_at as emailVerificationCheckedAt
+        notes
       FROM contacts
       WHERE id = ?
     `
@@ -267,9 +231,6 @@ function getContact(id: string) {
         linksJson: string | null;
         tags: string | null;
         notes: string | null;
-        emailVerificationProvider: string | null;
-        emailVerificationStatus: string | null;
-        emailVerificationCheckedAt: string | null;
       }
     | undefined;
 }

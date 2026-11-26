@@ -154,6 +154,10 @@ export async function markDeadAction(formData: FormData) {
   const now = new Date().toISOString();
 
   const transaction = sqlite.transaction(() => {
+    const open = sqlite.prepare("SELECT 1 FROM followup_tasks WHERE id = ? AND target_id = ? AND status = 'open'")
+      .get(followupId, targetId);
+    if (!open) return;
+
     sqlite
       .prepare(
         `

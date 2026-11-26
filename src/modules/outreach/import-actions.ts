@@ -23,7 +23,7 @@ import {
   parseSourceTimestampFromValues
 } from "@/modules/outreach/historical-timestamps";
 import { requestMailResync } from "@/modules/mailbox/resync-requests";
-import { stageFromLegacyStatus } from "@/modules/pipeline/stages";
+import { isOpenPipelineStage, stageFromLegacyStatus } from "@/modules/pipeline/stages";
 
 export async function previewCsvImportAction(
   _previousState: ImportActionState,
@@ -667,6 +667,7 @@ function repairImportedTarget({
 }) {
   const sqlite = getSqlite();
   const status = row.status || (row.sourceType === "contact_form" ? "form submitted" : "new");
+  const stage = stageFromLegacyStatus(status);
   const accountId = findOrCreateAccount({
     sqlite,
     name: row.companyName,
@@ -688,6 +689,8 @@ function repairImportedTarget({
           dedupe_key = ?,
           status = ?,
           stage = ?,
+          closed_at = CASE WHEN ? IN ('won', 'lost') THEN closed_at ELSE NULL END,
+          lost_reason = CASE WHEN ? = 'lost' THEN lost_reason ELSE NULL END,
           do_not_resend = ?,
           updated_at = ?
       WHERE id = ?
@@ -702,11 +705,16 @@ function repairImportedTarget({
       row.sourceUrl || null,
       row.dedupeKey,
       status,
-      stageFromLegacyStatus(status),
+      stage,
+      stage,
+      stage,
       row.doNotResend ? 1 : 0,
       sourceAt,
       targetId
     );
+
+  sqlite.prepare("DELETE FROM target_contacts WHERE target_id = ? AND contact_id = ?")
+    .run(targetId, contactId);
 
   sqlite
     .prepare(
@@ -1064,7 +1072,7 @@ function shouldCreateImportedFollowup(row: ImportPreviewRow) {
     return false;
   }
 
-  if (isSendBlockedStatus(status)) {
+  if (isSendBlockedStatus(status) || !isOpenPipelineStage(stageFromLegacyStatus(status))) {
     return false;
   }
 

@@ -111,7 +111,7 @@ function buildAccountSuggestions(records: AccountRecord[]) {
         reason:
           keep.domain && merge.domain
             ? "The company names match but the records use different domains."
-            : "The company names match and only one record has a domain."
+            : "The company names match after normalization."
       });
     }
   }
@@ -122,8 +122,13 @@ function buildAccountSuggestions(records: AccountRecord[]) {
 function buildContactSuggestions(records: ContactRecord[]) {
   const groups = groupBy(
     records,
-    (record) =>
-      `${normalizePersonName(record.name)}|${record.accountId ?? record.domain}`
+    (record) => {
+      const name = normalizePersonName(record.name);
+      const scope = record.accountId ? `account:${record.accountId}` : `domain:${record.domain}`;
+      return name && (record.accountId || (record.domain && record.domain !== "unknown"))
+        ? `${scope}|${name}`
+        : "";
+    }
   );
   const suggestions: DuplicateContact[] = [];
 
@@ -141,7 +146,9 @@ function buildContactSuggestions(records: ContactRecord[]) {
       suggestions.push({
         keep,
         merge,
-        reason: "These contacts have the same name in the same account."
+        reason: keep.accountId
+          ? "These contacts have the same name in the same account."
+          : "These contacts have the same name and email domain."
       });
     }
   }
@@ -165,20 +172,21 @@ function groupBy<T>(records: T[], keyFor: (record: T) => string) {
 
 function normalizeCompanyName(value: string) {
   return value
+    .normalize("NFKC")
     .toLowerCase()
     .replace(/&/g, " and ")
     .replace(
       /\b(incorporated|inc|llc|ltd|limited|corp|corporation|co|company|gmbh|pte)\b/g,
       " "
     )
-    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/[^\p{L}\p{M}\p{N}]+/gu, " ")
     .trim();
 }
 
 function normalizePersonName(value: string) {
   return value
-    .normalize("NFKD")
+    .normalize("NFKC")
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/[^\p{L}\p{M}\p{N}]+/gu, " ")
     .trim();
 }

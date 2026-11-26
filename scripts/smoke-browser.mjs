@@ -174,7 +174,7 @@ try {
 
   await page.goto(base);
   await expect(
-    page.getByRole("heading", { name: "Start tracking your outreach" }),
+    page.getByRole("heading", { name: "Start with one conversation" }),
   ).toBeVisible();
   await page.getByRole("link", { name: "Templates", exact: true }).click();
   await expect(
@@ -339,9 +339,10 @@ try {
   await backups
     .getByRole("button", { name: "Save schedule", exact: true })
     .click();
-  await expect(backups.getByText("Scheduled", { exact: true })).toBeVisible();
-  await backups.getByRole("button", { name: "Run now", exact: true }).click();
-  await expect(backups.getByText(/Last run:.*\(success\)/)).toBeVisible({
+  const runBackup = backups.getByRole("button", { name: "Run now", exact: true });
+  await expect(runBackup).toBeEnabled();
+  await runBackup.click();
+  await expect(backups.getByText(/^Last success: .* UTC$/)).toBeVisible({
     timeout: 25000,
   });
   await expect(

@@ -28,25 +28,24 @@ export function normalizeCurrency(value: string | null | undefined): CurrencyCod
 export function parseDealValueToCents(
   value: FormDataEntryValue | string | null | undefined
 ) {
-  const text = String(value ?? "")
-    .trim()
-    .replaceAll(",", "");
+  const text = String(value ?? "").trim();
 
   if (!text) {
     return null;
   }
 
-  if (!/^\d+(?:\.\d{1,2})?$/.test(text)) {
+  if (!/^(?:(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?$/i.test(text)) {
     return undefined;
   }
 
-  const amount = Number(text);
+  const amount = Number(text.replaceAll(",", ""));
 
   if (!Number.isFinite(amount) || amount < 0 || amount > 1_000_000_000) {
     return undefined;
   }
 
-  return Math.round(amount * 100);
+  const cents = Math.round(amount * 100);
+  return cents / 100 === amount ? cents : undefined;
 }
 
 export function centsToInputValue(value: number | null | undefined) {
@@ -99,26 +98,12 @@ export function formatPipelineValue(
     totals.set(currency, (totals.get(currency) ?? 0) + value.cents);
   }
 
-  const nonZero = Array.from(totals, ([currency, cents]) => ({
-    currency,
-    cents
-  })).filter((value) => value.cents > 0);
-
-  if (!nonZero.length) {
+  if (!totals.size) {
     return "No value set";
   }
 
-  if (nonZero.length === 1) {
-    return formatMoney(nonZero[0].cents, nonZero[0].currency, {
-      compact: true
-    });
-  }
-
-  return nonZero
-    .slice(0, 2)
-    .map((value) =>
-      formatMoney(value.cents, value.currency, { compact: true })
-    )
+  return Array.from(totals)
+    .map(([currency, cents]) => formatMoney(cents, currency, { compact: true }))
     .join(" + ");
 }
 

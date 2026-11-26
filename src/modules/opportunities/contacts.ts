@@ -35,7 +35,9 @@ export function getTargetAdditionalContacts(
         target_contacts.role
       FROM target_contacts
       INNER JOIN contacts ON contacts.id = target_contacts.contact_id
+      INNER JOIN targets ON targets.id = target_contacts.target_id
       WHERE target_contacts.target_id = ?
+        AND contacts.id IS NOT targets.contact_id
       ORDER BY contacts.name COLLATE NOCASE ASC, contacts.email ASC
     `
     )
@@ -57,7 +59,6 @@ export function getAvailableContactsForTarget(targetId: string) {
             AND target_contacts.contact_id = contacts.id
         )
       ORDER BY contacts.name COLLATE NOCASE ASC, contacts.email ASC
-      LIMIT 200
     `
     )
     .all(targetId) as Array<{ id: string; name: string; email: string }>;
@@ -75,6 +76,7 @@ export function getContactOpportunityRoles(contactId: string) {
       FROM target_contacts
       INNER JOIN targets ON targets.id = target_contacts.target_id
       WHERE target_contacts.contact_id = ?
+        AND target_contacts.contact_id IS NOT targets.contact_id
       ORDER BY targets.updated_at DESC
     `
     )

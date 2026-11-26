@@ -315,6 +315,26 @@ test("AI automation triages replies, drafts follow-ups and captures unlinked lea
     assert.equal(getLatestTargetAiReview("t1")?.output.intent, "interested");
   });
 
+  await t.test("accepting a Won stage closes existing reminders and prevents a replacement", async () => {
+    const review = getLatestTargetAiReview("t1")!;
+    const output = {
+      ...review.output, suggestedStage: "won",
+      nextAction: { type: "follow_up", dueInDays: 2, reason: "Check in" }
+    };
+    sqlite.prepare("UPDATE ai_runs SET output_json = ?, review_status = 'pending' WHERE id = ?")
+      .run(JSON.stringify(output), review.run.id);
+    sqlite.prepare("INSERT INTO followup_tasks (id, target_id, due_at, status, created_at) VALUES ('closing', 't1', ?, 'open', ?)")
+      .run(now, now);
+    try {
+      await acceptAiSuggestionAction(form({ runId: review.run.id }));
+    } catch (error) {
+      assert.match(String(error), /static generation store missing in revalidatePath/);
+    }
+    assert.equal(sqlite.prepare("SELECT stage FROM targets WHERE id = 't1'").pluck().get(), "won");
+    assert.ok(sqlite.prepare("SELECT closed_at FROM targets WHERE id = 't1'").pluck().get());
+    assert.equal(sqlite.prepare("SELECT count(*) FROM followup_tasks WHERE target_id = 't1' AND status = 'open'").pluck().get(), 0);
+  });
+
   await t.test("successful AI results are reused without another provider request", async () => {
     const args = {
       kind: "followup_draft" as const,

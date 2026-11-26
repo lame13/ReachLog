@@ -67,7 +67,7 @@ async function submit(route, form, values, buttonText, expectedStatus = 303) {
 try {
   await start();
   const dashboard = await (await get('/dashboard')).text();
-  assert.match(dashboard, /Start tracking your outreach/);
+  assert.match(dashboard, /Start with one conversation/);
   const assets = [...new Set([...dashboard.matchAll(/(?:src|href)="([^" ]*\/_next\/static\/[^" ]+)"/g)].map((match) => decode(match[1])))];
   assert.ok(assets.some((asset) => asset.endsWith('.css')));
   assert.ok(assets.some((asset) => asset.endsWith('.js')));

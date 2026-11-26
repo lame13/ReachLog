@@ -12,6 +12,7 @@ import {
   threads
 } from "@/modules/core/db/schema";
 import { endOfTodayIso, startOfTodayIso } from "@/modules/core/dates";
+import { findStaleOpportunities } from "@/modules/opportunities/stale";
 import { env } from "@/modules/core/env";
 import { isTargetActionBlocked } from "@/modules/outreach/status";
 import { getEmailDraft } from "@/modules/smtp/drafts";
@@ -71,10 +72,6 @@ export function getDashboardData() {
   const dueFollowups = getFollowups("due");
   const overdueFollowups = getFollowups("overdue");
   const todayEnd = endOfTodayIso();
-  const staleBefore = new Date(
-    Date.now() - env.STALE_DEAL_DAYS * 86_400_000
-  ).toISOString();
-
   const replyCount = sqlite
     .prepare(
       `
@@ -176,84 +173,9 @@ export function getDashboardData() {
       )
       .get(todayEnd) as { count: number }
   ).count;
-  const staleOpportunities = sqlite
-    .prepare(
-      `
-      SELECT
-        targets.id as targetId,
-        targets.company_name as companyName,
-        contacts.name as contactName,
-        contacts.email as contactEmail,
-        targets.stage,
-        targets.next_step as nextStep,
-        targets.next_step_at as nextStepAt,
-        MAX(
-          targets.updated_at,
-          COALESCE((
-            SELECT MAX(COALESCE(messages.sent_at, messages.received_at, messages.created_at))
-            FROM messages
-            INNER JOIN threads ON threads.id = messages.thread_id
-            WHERE threads.target_id = targets.id
-          ), ''),
-          COALESCE((
-            SELECT MAX(threads.updated_at)
-            FROM threads
-            WHERE threads.target_id = targets.id
-          ), '')
-        ) as activityAt
-      FROM targets
-      LEFT JOIN contacts ON contacts.id = targets.contact_id
-      WHERE targets.stage NOT IN ('won', 'lost')
-        AND (
-          trim(COALESCE(targets.next_step, '')) = ''
-          OR targets.next_step_at IS NULL
-        )
-      ORDER BY activityAt ASC
-      LIMIT 20
-    `
-    )
-    .all() as Array<{
-    targetId: string;
-    companyName: string;
-    contactName: string | null;
-    contactEmail: string | null;
-    stage: string;
-    nextStep: string | null;
-    nextStepAt: string | null;
-    activityAt: string;
-  }>;
-  const staleCandidates = staleOpportunities.filter(
-    (target) => target.activityAt < staleBefore
-  );
-  const staleCount = (
-    sqlite
-      .prepare(
-        `
-        SELECT COUNT(*) as count
-        FROM targets
-        WHERE targets.stage NOT IN ('won', 'lost')
-          AND (
-            trim(COALESCE(targets.next_step, '')) = ''
-            OR targets.next_step_at IS NULL
-          )
-          AND MAX(
-            targets.updated_at,
-            COALESCE((
-              SELECT MAX(COALESCE(messages.sent_at, messages.received_at, messages.created_at))
-              FROM messages
-              INNER JOIN threads ON threads.id = messages.thread_id
-              WHERE threads.target_id = targets.id
-            ), ''),
-            COALESCE((
-              SELECT MAX(threads.updated_at)
-              FROM threads
-              WHERE threads.target_id = targets.id
-            ), '')
-          ) < ?
-      `
-      )
-      .get(staleBefore) as { count: number }
-  ).count;
+  const staleOpportunities = findStaleOpportunities({
+    sqlite, days: env.STALE_DEAL_DAYS, includeNotified: true, limit: 8
+  });
 
   const recentMessages = db
     .select({
@@ -319,12 +241,12 @@ export function getDashboardData() {
       sentNoReply: sentNoReplyCount?.count ?? 0,
       failedSends: failedSendCount?.count ?? 0,
       nextStepsDue: nextStepCount,
-      staleOpportunities: staleCount
+      staleOpportunities: staleOpportunities[0]?.total ?? 0
     },
     replies,
     followups,
     nextSteps,
-    staleOpportunities: staleCandidates.slice(0, 8),
+    staleOpportunities,
     recentMessages,
     failedSends
   };

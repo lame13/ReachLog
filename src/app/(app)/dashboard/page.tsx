@@ -62,7 +62,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   const sendFeedback = getSendFeedback(params);
   const pendingAiReviews = getPendingAiReviewCount();
 
-  if (!data.stats.totalTargets) {
+  if (!data.stats.totalTargets && !pendingAiReviews) {
     return (
       <section className="max-w-2xl rounded-lg border border-line bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-semibold">Start with one conversation</h1>
@@ -428,6 +428,7 @@ function buildWorkQueue(data: ReturnType<typeof getDashboardData>): WorkItem[] {
   const items = new Map<string, WorkItem>();
 
   for (const reply of data.replies) {
+    if (items.has(reply.targetId)) continue;
     items.set(reply.targetId, {
       key: `reply-${reply.threadId}`,
       targetId: reply.targetId,

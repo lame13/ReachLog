@@ -235,10 +235,10 @@ export function applyTriageStage({
 
   sqlite.transaction(() => {
     sqlite
-      .prepare("UPDATE targets SET stage = ?, status = ?, updated_at = ? WHERE id = ?")
-      .run(suggested, status, now, target.id);
+      .prepare("UPDATE targets SET stage = ?, status = ?, closed_at = ?, updated_at = ? WHERE id = ?")
+      .run(suggested, status, suggestedStage.kind === "open" ? null : now, now, target.id);
 
-    if (suggested === "lost") {
+    if (suggestedStage.kind !== "open") {
       sqlite
         .prepare(
           "UPDATE followup_tasks SET status = 'cancelled', completed_at = ? WHERE target_id = ? AND status = 'open'"
@@ -289,6 +289,11 @@ export function createTriageFollowup({
     return false;
   }
 
+  const sqlite = getSqlite();
+  const openTarget = sqlite.prepare("SELECT 1 FROM targets WHERE id = ? AND stage NOT IN ('won', 'lost')")
+    .get(target.id);
+  if (!openTarget) return false;
+
   const dueInDays = output.nextAction.dueInDays;
   if (dueInDays === null && !force) return false;
   const days = Math.max(
@@ -298,7 +303,6 @@ export function createTriageFollowup({
   const dueAt = new Date(Date.now() + days * 86_400_000);
   dueAt.setUTCHours(9, 0, 0, 0);
   const dueAtIso = dueAt.toISOString();
-  const sqlite = getSqlite();
   const now = new Date().toISOString();
   const existing = sqlite
     .prepare(

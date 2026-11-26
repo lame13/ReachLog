@@ -21,7 +21,7 @@ export default function DuplicatesPage() {
       {total === 0 ? (
         <section className="rounded-lg border border-line bg-white p-6 text-sm text-muted shadow-sm">
           No likely duplicates found. Accounts are compared by company name and
-          contacts by name within the same account.
+          contacts by name within a shared account or email domain.
         </section>
       ) : (
         <div className="space-y-6">
@@ -36,33 +36,16 @@ export default function DuplicatesPage() {
             <div className="divide-y divide-line">
               {suggestions.accounts.length ? (
                 suggestions.accounts.map((suggestion) => (
-                  <article
-                    className="grid gap-4 px-4 py-4 lg:grid-cols-[1fr_auto_1fr_auto] lg:items-center"
+                  <DuplicatePair
                     key={`${suggestion.keep.id}-${suggestion.merge.id}`}
-                  >
-                    <RecordCard
-                      name={suggestion.keep.name}
-                      detail={`${suggestion.keep.domain ?? "no domain"} · ${suggestion.keep.contactCount} contacts · ${suggestion.keep.targetCount} targets`}
-                      href={`/accounts/${suggestion.keep.id}`}
-                      label="Keep"
-                    />
-                    <span className="hidden text-xs font-medium text-muted lg:block">
-                      instead of
-                    </span>
-                    <RecordCard
-                      name={suggestion.merge.name}
-                      detail={`${suggestion.merge.domain ?? "no domain"} · ${suggestion.merge.contactCount} contacts · ${suggestion.merge.targetCount} targets`}
-                      href={`/accounts/${suggestion.merge.id}`}
-                      label="Merge"
-                    />
-                    <MergeRecordsButton
-                      keepId={suggestion.keep.id}
-                      keepName={suggestion.keep.name}
-                      kind="account"
-                      mergeId={suggestion.merge.id}
-                      mergeName={suggestion.merge.name}
-                    />
-                  </article>
+                    kind="account"
+                    records={[suggestion.keep, suggestion.merge].map((record) => ({
+                      id: record.id,
+                      name: record.name,
+                      label: record.domain ? `${record.name} (${record.domain})` : record.name,
+                      detail: `${record.domain ?? "no domain"} · ${record.contactCount} contacts · ${record.targetCount} targets`
+                    }))}
+                  />
                 ))
               ) : (
                 <div className="px-4 py-6 text-sm text-muted">
@@ -83,33 +66,16 @@ export default function DuplicatesPage() {
             <div className="divide-y divide-line">
               {suggestions.contacts.length ? (
                 suggestions.contacts.map((suggestion) => (
-                  <article
-                    className="grid gap-4 px-4 py-4 lg:grid-cols-[1fr_auto_1fr_auto] lg:items-center"
+                  <DuplicatePair
                     key={`${suggestion.keep.id}-${suggestion.merge.id}`}
-                  >
-                    <RecordCard
-                      name={suggestion.keep.name}
-                      detail={`${suggestion.keep.email} · ${suggestion.keep.accountName ?? suggestion.keep.domain} · ${suggestion.keep.targetCount} targets · added ${formatDate(suggestion.keep.createdAt)}`}
-                      href={`/contacts/${suggestion.keep.id}`}
-                      label="Keep"
-                    />
-                    <span className="hidden text-xs font-medium text-muted lg:block">
-                      instead of
-                    </span>
-                    <RecordCard
-                      name={suggestion.merge.name}
-                      detail={`${suggestion.merge.email} · ${suggestion.merge.accountName ?? suggestion.merge.domain} · ${suggestion.merge.targetCount} targets · added ${formatDate(suggestion.merge.createdAt)}`}
-                      href={`/contacts/${suggestion.merge.id}`}
-                      label="Merge"
-                    />
-                    <MergeRecordsButton
-                      keepId={suggestion.keep.id}
-                      keepName={suggestion.keep.name}
-                      kind="contact"
-                      mergeId={suggestion.merge.id}
-                      mergeName={suggestion.merge.email}
-                    />
-                  </article>
+                    kind="contact"
+                    records={[suggestion.keep, suggestion.merge].map((record) => ({
+                      id: record.id,
+                      name: record.name,
+                      label: record.email,
+                      detail: `${record.email} · ${record.accountName ?? record.domain} · ${record.targetCount} targets · added ${formatDate(record.createdAt)}`
+                    }))}
+                  />
                 ))
               ) : (
                 <div className="px-4 py-6 text-sm text-muted">
@@ -124,26 +90,30 @@ export default function DuplicatesPage() {
   );
 }
 
-function RecordCard({
-  name,
-  detail,
-  href,
-  label
-}: {
-  name: string;
-  detail: string;
-  href: string;
-  label: string;
+function DuplicatePair({ kind, records }: {
+  kind: "account" | "contact";
+  records: Array<{ id: string; name: string; label: string; detail: string }>;
 }) {
   return (
-    <div className="rounded-md border border-line bg-panel p-3">
-      <div className="text-xs font-medium uppercase tracking-wide text-muted">
-        {label}
-      </div>
-      <Link className="mt-1 block font-medium hover:underline" href={href}>
-        {name}
-      </Link>
-      <div className="mt-1 text-xs text-muted">{detail}</div>
-    </div>
+    <article className="grid gap-4 px-4 py-4 lg:grid-cols-2">
+      {records.map((record, index) => {
+        const other = records[1 - index];
+        return (
+          <div className="min-w-0 space-y-2 rounded-md border border-line bg-panel p-3" key={record.id}>
+            <Link className="font-medium hover:underline" href={`/${kind}s/${record.id}`}>
+              {record.name}
+            </Link>
+            <div className="break-words text-xs text-muted">{record.detail}</div>
+            <MergeRecordsButton
+              kind={kind}
+              keepId={record.id}
+              keepName={record.label}
+              mergeId={other.id}
+              mergeName={other.label}
+            />
+          </div>
+        );
+      })}
+    </article>
   );
 }

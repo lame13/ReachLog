@@ -75,6 +75,12 @@ test("opportunity and relationship workflow", async (t) => {
     assert.equal(values.parseDealValueToCents(""), null);
     assert.equal(values.parseDealValueToCents("-10"), undefined);
     assert.equal(values.parseDealValueToCents("12.345"), undefined);
+    assert.equal(values.parseDealValueToCents("12,34"), undefined);
+    assert.equal(values.parseDealValueToCents("1e2"), 10000);
+    const totals = [{ currency: "USD", cents: 0 }, { currency: "EUR", cents: 100 }, { currency: "THB", cents: 200 }];
+    assert.equal(values.formatPipelineValue(totals), totals.map(({ cents, currency }) =>
+      values.formatMoney(cents, currency, { compact: true })).join(" + "));
+    assert.equal(values.formatPipelineValue([]), "No value set");
     assert.equal(values.centsToInputValue(125050), "1250.50");
     assert.equal(values.normalizeCurrency("thb"), "THB");
     assert.equal(values.normalizeCurrency("nope"), "USD");
@@ -224,6 +230,14 @@ test("opportunity and relationship workflow", async (t) => {
     ) as Array<Record<string, unknown>>;
     assert.equal(exported[0]?.valueCents, 425050);
     assert.equal(exported[0]?.currency, "THB");
+  });
+
+  await t.test("an invalid deal value cannot clear a saved amount", async () => {
+    await assert.rejects(
+      outreachActions.updateTargetAction(form({ targetId: "t1", companyName: "Northstar", dealValue: "1000000001" })),
+      /deal value/
+    );
+    assert.equal(sqlite.prepare("SELECT value_cents FROM targets WHERE id = 't1'").pluck().get(), 425050);
   });
 
   await t.test("reopening clears the close date and stage move records closure", async () => {
@@ -376,6 +390,14 @@ test("opportunity and relationship workflow", async (t) => {
       0
     );
 
+    sqlite.prepare("UPDATE contacts SET email_verification_status = 'pending', email_verification_checked_at = NULL WHERE id = 'c1'").run();
+    sqlite.prepare("UPDATE contacts SET email_verification_status = 'valid', email_verification_checked_at = ? WHERE id = 'c-mina-duplicate'").run(now);
+    await runAction(contactActions.addOpportunityContactAction, {
+      targetId: "t1", contactId: "c-mina-duplicate", role: "Finance"
+    });
+    await runAction(contactActions.addOpportunityContactAction, {
+      targetId: "t-duplicate", contactId: "c-mina-duplicate", role: "Champion"
+    });
     await runAction(duplicateActions.mergeContactsAction, {
       keepId: "c1",
       mergeId: "c-mina-duplicate"
@@ -390,7 +412,24 @@ test("opportunity and relationship workflow", async (t) => {
       ).count,
       0
     );
+    assert.deepEqual(sqlite.prepare("SELECT email_verification_status, email_verification_checked_at FROM contacts WHERE id = 'c1'").get(), {
+      email_verification_status: "pending", email_verification_checked_at: null
+    });
+    assert.equal(sqlite.prepare("SELECT COUNT(*) FROM target_contacts WHERE target_id = 't1'").pluck().get(), 0);
+    assert.deepEqual(sqlite.prepare("SELECT contact_id, role FROM target_contacts WHERE target_id = 't-duplicate'").get(), {
+      contact_id: "c1", role: "Champion"
+    });
     assert.deepEqual(sqlite.pragma("foreign_key_check"), []);
+  });
+
+  await t.test("duplicate suggestions distinguish names written in non-Latin scripts", () => {
+    const contact = sqlite.prepare("INSERT INTO contacts (id, account_id, name, email, domain, created_at, updated_at) VALUES (?, 'a1', ?, ?, 'northstar.example', ?, ?)");
+    for (const [id, name] of [["li", "李明"], ["li2", "李明"], ["wang", "王敏"]]) {
+      contact.run(id, name, `${id}@northstar.example`, now, now);
+    }
+    const pairs = duplicateQueries.getDuplicateSuggestions().contacts;
+    assert.ok(pairs.some(({ keep, merge }) => keep.id === "li" && merge.id === "li2"));
+    assert.ok(pairs.every(({ keep, merge }) => keep.id !== "wang" && merge.id !== "wang"));
   });
 
   await t.test("stale opportunities are batched once per activity period", () => {
@@ -426,5 +465,35 @@ test("opportunity and relationship workflow", async (t) => {
         .some((row) => row.targetId === "t-stale"),
       false
     );
+    assert.ok(queries.getDashboardData().staleOpportunities.some((row) => row.targetId === "t-stale"));
+    sqlite.prepare("UPDATE targets SET next_step = 'Call Mina', stale_notified_at = NULL WHERE id = 't-stale'").run();
+    assert.ok(!queries.getDashboardData().staleOpportunities.some((row) => row.targetId === "t-stale"));
+    assert.ok(!stale.findStaleOpportunities({ sqlite, days: 14 }).some((row) => row.targetId === "t-stale"));
+  });
+
+  await t.test("closure is consistent for imports, legacy stages and stale follow-up forms", async () => {
+    const { commitCsvImportAction } = await import("../src/modules/outreach/import-actions");
+    const { initialImportState } = await import("../src/modules/outreach/import-state");
+    const { markDeadAction } = await import("../src/modules/followups/actions");
+    await commitCsvImportAction(initialImportState, form({
+      csvText: "company_name,email,status,follow_up_date\nSold,owner@sold.example,won,2026-12-20"
+    }));
+    const imported = sqlite.prepare("SELECT id FROM targets WHERE company_name = 'Sold' AND stage = 'won'").pluck().get();
+    assert.ok(imported);
+    assert.equal(sqlite.prepare("SELECT COUNT(*) FROM followup_tasks WHERE target_id = ?").pluck().get(imported), 0);
+
+    await runAction(outreachActions.createTargetAction, {
+      companyName: "Signed deal", dedupeKey: "signed-deal", status: "signed"
+    });
+    const targetId = sqlite.prepare("SELECT id FROM targets WHERE dedupe_key = 'signed-deal'").pluck().get() as string;
+    const closure = sqlite.prepare("SELECT stage, closed_at FROM targets WHERE id = ?");
+    assert.ok((closure.get(targetId) as { closed_at: string }).closed_at);
+    await runAction(markDeadAction, { targetId, followupId: "old-followup" });
+    assert.equal((closure.get(targetId) as { stage: string }).stage, "won");
+    await runAction(pipelineActions.moveTargetStageAction, { targetId, stage: "qualified" });
+    await runAction(outreachActions.updateDoNotResendAction, { targetId, enabled: "true" });
+    const closed = closure.get(targetId) as { stage: string; closed_at: string };
+    assert.equal(closed.stage, "lost");
+    assert.ok(closed.closed_at);
   });
 });

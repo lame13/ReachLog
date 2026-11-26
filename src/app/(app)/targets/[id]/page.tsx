@@ -507,6 +507,7 @@ export default async function TargetDetailPage({
                 <DetailField
                   label="Deal value"
                   name="dealValue"
+                  max="1000000000"
                   min="0"
                   placeholder="0.00"
                   step="0.01"
@@ -755,6 +756,7 @@ function DetailField({
   required = false,
   placeholder,
   step,
+  max,
   min
 }: {
   label: string;
@@ -764,6 +766,7 @@ function DetailField({
   required?: boolean;
   placeholder?: string;
   step?: string;
+  max?: string;
   min?: string;
 }) {
   return (
@@ -775,6 +778,7 @@ function DetailField({
         name={name}
         placeholder={placeholder}
         required={required}
+        max={max}
         min={min}
         step={step}
         type={type}
@@ -786,7 +790,7 @@ function DetailField({
 function getDateInputValue(daysFromNow: number) {
   const date = new Date();
   date.setDate(date.getDate() + daysFromNow);
-  return date.toISOString().slice(0, 10);
+  return getDateInputPart(date.toISOString());
 }
 
 function getDateInputPart(value: string | null | undefined) {
